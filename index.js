@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { createTilemap } from './tilemap.js';
+import { Editor } from './editor.js';
+import { UIManager } from './ui.js';
+import { RouteManager } from './routes.js';
 
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -24,9 +27,42 @@ scene.add(directionalLight);
 // Create tilemap
 const tiles = createTilemap(scene);
 
+// Initialize systems
+const routeManager = new RouteManager(scene);
+const editor = new Editor(scene, camera, renderer, tiles);
+const ui = new UIManager();
+
+// Connect UI callbacks
+ui.onModeChange = (mode) => {
+  editor.setMode(mode);
+  if (mode === 'VIEW') {
+    routeManager.cancelRouteCreation();
+  }
+};
+
+ui.onObjectTypeSelect = (type) => {
+  editor.setSelectedObjectType(type);
+};
+
+ui.onRouteModeToggle = (enabled) => {
+  if (enabled) {
+    routeManager.startRouteCreation();
+    editor.setRouteMode(true);
+    editor.setMode('EDIT'); // Switch to edit mode for route creation
+  } else {
+    routeManager.cancelRouteCreation();
+    editor.setRouteMode(false);
+  }
+};
+
+ui.onObjectDelete = (objectId) => {
+  editor.deleteObject(objectId);
+};
+
 // Mouse camera controls
 let isDragging = false;
 let previousMousePosition = {x: 0, y: 0};
+let isCameraDragging = false;
 
 // Zoom settings
 const minDistance = 5;
@@ -34,44 +70,76 @@ const maxDistance = 50;
 let currentZoomDistance = camera.position.distanceTo(cameraTarget);
 
 const onMouseDown = (event) => {
-  isDragging = true;
-  previousMousePosition = {x: event.clientX, y: event.clientY};
+  const currentMode = ui.getCurrentMode();
+  const isRouteMode = routeManager.isInRouteCreationMode();
+  
+  // Handle route creation
+  if (isRouteMode) {
+    const result = editor.raycast(event);
+    if (result && result.type === 'tile') {
+      routeManager.addWaypoint(result.position);
+    }
+    return;
+  }
+  
+  // Try editor interaction first
+  const handled = editor.handleMouseDown(event);
+  if (handled) {
+    isCameraDragging = false;
+    isDragging = true;
+    previousMousePosition = {x: event.clientX, y: event.clientY};
+    return;
+  }
+  
+  // Allow camera dragging in VIEW mode, or in EDIT mode when clicking empty space
+  // Also allow with Shift modifier in any mode
+  if (currentMode === 'VIEW' || currentMode === 'EDIT' || event.shiftKey) {
+    isCameraDragging = true;
+    isDragging = true;
+    previousMousePosition = {x: event.clientX, y: event.clientY};
+  }
 };
 
 const onMouseMove = (event) => {
-  if (!isDragging) return;
+  // Handle editor dragging
+  editor.handleMouseMove(event);
   
-  const deltaX = event.clientX - previousMousePosition.x;
-  const deltaY = event.clientY - previousMousePosition.y;
-  
-  // Pan speed
-  const panSpeed = 0.025;
-  
-  // Calculate right vector (perpendicular to camera direction, horizontal)
-  const right = new THREE.Vector3();
-  camera.getWorldDirection(right);
-  right.cross(camera.up).normalize();
-  
-  // Calculate forward vector (camera direction projected onto horizontal plane)
-  const forward = new THREE.Vector3();
-  camera.getWorldDirection(forward);
-  forward.y = 0; // Keep horizontal
-  forward.normalize();
-  
-  // Move camera and target together to maintain angle
-  const moveRight = right.multiplyScalar(-deltaX * panSpeed);
-  const moveForward = forward.multiplyScalar(deltaY * panSpeed);
-  const move = new THREE.Vector3().addVectors(moveRight, moveForward);
-  
-  camera.position.add(move);
-  cameraTarget.add(move);
-  camera.lookAt(cameraTarget);
-  
-  previousMousePosition = {x: event.clientX, y: event.clientY};
+  // Handle camera dragging
+  if (isDragging && isCameraDragging) {
+    const deltaX = event.clientX - previousMousePosition.x;
+    const deltaY = event.clientY - previousMousePosition.y;
+    
+    // Pan speed
+    const panSpeed = 0.025;
+    
+    // Calculate right vector (perpendicular to camera direction, horizontal)
+    const right = new THREE.Vector3();
+    camera.getWorldDirection(right);
+    right.cross(camera.up).normalize();
+    
+    // Calculate forward vector (camera direction projected onto horizontal plane)
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0; // Keep horizontal
+    forward.normalize();
+    
+    // Move camera and target together to maintain angle
+    const moveRight = right.multiplyScalar(-deltaX * panSpeed);
+    const moveForward = forward.multiplyScalar(deltaY * panSpeed);
+    const move = new THREE.Vector3().addVectors(moveRight, moveForward);
+    
+    camera.position.add(move);
+    cameraTarget.add(move);
+    camera.lookAt(cameraTarget);
+    
+    previousMousePosition = {x: event.clientX, y: event.clientY};
+  }
 };
 
-const onMouseUp = () => {
+const onMouseUp = (event) => {
+  editor.handleMouseUp(event);
   isDragging = false;
+  isCameraDragging = false;
 };
 
 const onWheel = (event) => {
@@ -120,12 +188,46 @@ const onWheel = (event) => {
   camera.lookAt(cameraTarget);
 };
 
+// Right-click handler for properties panel
+const onContextMenu = (event) => {
+  event.preventDefault();
+  const currentMode = ui.getCurrentMode();
+  const isRouteMode = routeManager.isInRouteCreationMode();
+  
+  // Finish route creation on right-click if in route mode
+  if (isRouteMode) {
+    routeManager.finishRoute();
+    ui.toggleRouteMode(); // This will call the callback to disable route mode
+    return;
+  }
+  
+  // Show properties panel for objects in edit mode
+  if (currentMode === 'EDIT') {
+    const object = editor.handleRightClick(event);
+    if (object) {
+      ui.showPropertiesPanel(object);
+    } else {
+      ui.hidePropertiesPanel();
+    }
+  }
+};
+
+// Double-click to finish route
+const onDoubleClick = (event) => {
+  if (routeManager.isInRouteCreationMode()) {
+    routeManager.finishRoute();
+    ui.toggleRouteMode(); // This will call the callback to disable route mode
+  }
+};
+
 // Add event listeners
 renderer.domElement.addEventListener('mousedown', onMouseDown);
 renderer.domElement.addEventListener('mousemove', onMouseMove);
 renderer.domElement.addEventListener('mouseup', onMouseUp);
 renderer.domElement.addEventListener('mouseleave', onMouseUp); // Stop dragging when mouse leaves
 renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+renderer.domElement.addEventListener('contextmenu', onContextMenu);
+renderer.domElement.addEventListener('dblclick', onDoubleClick);
 
 // Handle window resize
 window.addEventListener('resize', () => {
