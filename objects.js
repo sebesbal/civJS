@@ -18,6 +18,16 @@ export class ObjectManager {
     this.tilemap = tilemap;
   }
 
+  // Calculate height offset for object based on its shape
+  getObjectHeightOffset(typeDef) {
+    if (typeDef.shape === 'cylinder' || typeDef.shape === 'box') {
+      return typeDef.size.height / 2;
+    } else if (typeDef.shape === 'sphere') {
+      return typeDef.size.radius;
+    }
+    return 0;
+  }
+
   createObject(type, position, id = null) {
     const typeDef = ObjectTypes[type];
     if (!typeDef) {
@@ -47,14 +57,7 @@ export class ObjectManager {
     const mesh = new THREE.Mesh(geometry, material);
     
     // Calculate object height offset so it sits on top of the tile surface
-    let heightOffset = 0;
-    if (typeDef.shape === 'cylinder') {
-      heightOffset = typeDef.size.height / 2;
-    } else if (typeDef.shape === 'box') {
-      heightOffset = typeDef.size.height / 2;
-    } else if (typeDef.shape === 'sphere') {
-      heightOffset = typeDef.size.radius;
-    }
+    const heightOffset = this.getObjectHeightOffset(typeDef);
     
     // Position object on top of tile (position.y is the tile top surface)
     mesh.position.set(position.x, position.y + heightOffset, position.z);
@@ -139,20 +142,12 @@ export class ObjectManager {
     const objectData = this.objects.find(obj => obj.id === objectId);
     if (!objectData) return false;
 
-    // Calculate height based on object type
     const typeDef = ObjectTypes[objectData.type];
-    let height = 0.5;
-    if (typeDef.shape === 'cylinder') {
-      height = typeDef.size.height / 2;
-    } else if (typeDef.shape === 'box') {
-      height = typeDef.size.height / 2;
-    } else if (typeDef.shape === 'sphere') {
-      height = typeDef.size.radius;
-    }
+    const heightOffset = this.getObjectHeightOffset(typeDef);
 
     objectData.mesh.position.set(
       newPosition.x,
-      newPosition.y + height,
+      newPosition.y + heightOffset,
       newPosition.z
     );
     
@@ -185,16 +180,7 @@ export class ObjectManager {
     const objects = this.objects.map(obj => {
       const pos = obj.mesh.position;
       const typeDef = ObjectTypes[obj.type];
-      
-      // Calculate height offset to get back to tile surface position
-      let heightOffset = 0;
-      if (typeDef.shape === 'cylinder') {
-        heightOffset = typeDef.size.height / 2;
-      } else if (typeDef.shape === 'box') {
-        heightOffset = typeDef.size.height / 2;
-      } else if (typeDef.shape === 'sphere') {
-        heightOffset = typeDef.size.radius;
-      }
+      const heightOffset = this.getObjectHeightOffset(typeDef);
       
       return {
         id: obj.id,

@@ -109,6 +109,13 @@ export class Editor {
     return new THREE.Vector3(tileWorldX, 0, tileWorldZ);
   }
 
+  // Get tile top surface Y position from intersection result
+  getTileTopSurfaceFromResult(result) {
+    if (!result || result.type !== 'tile') return null;
+    const clickedTile = result.intersection.object;
+    return clickedTile.position.y + (clickedTile.geometry.parameters.height / 2);
+  }
+
   // Raycast to find intersection with tiles, objects, or routes
   raycast(event) {
     this.updateMousePosition(event);
@@ -214,12 +221,11 @@ export class Editor {
     } else if (result.type === 'tile') {
       if (this.selectedObjectType) {
         // Place object on tile
-        // Get the clicked tile to find its top surface
-        const clickedTile = result.intersection.object;
-        const tileTopY = clickedTile.position.y + (clickedTile.geometry.parameters.height / 2);
+        const tileTopY = this.getTileTopSurfaceFromResult(result);
+        if (tileTopY === null) return false;
         
-        var position = result.position.clone();
-        position.y = tileTopY; // Position object on top of the tile
+        const position = result.position.clone();
+        position.y = tileTopY;
         
         this.objectManager.createObject(this.selectedObjectType, position);
         return true;
@@ -240,12 +246,11 @@ export class Editor {
     if (this.isDraggingObject && this.dragObject) {
       const result = this.raycast(event);
       if (result && result.type === 'tile') {
-        // Get the clicked tile to find its top surface
-        const clickedTile = result.intersection.object;
-        const tileTopY = clickedTile.position.y + (clickedTile.geometry.parameters.height / 2);
+        const tileTopY = this.getTileTopSurfaceFromResult(result);
+        if (tileTopY === null) return;
         
         const position = result.position.clone();
-        position.y = tileTopY; // Position object on top of the tile
+        position.y = tileTopY;
         
         this.objectManager.moveObject(this.dragObject.id, position);
       }

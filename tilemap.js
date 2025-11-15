@@ -16,6 +16,18 @@ export class Tilemap {
     this.createTiles(options.tileData || null);
   }
 
+  // Convert saved heightVariation to normalized height value (0-1)
+  convertHeightVariationToValue(heightVariation) {
+    const maxAbs = Math.max(Math.abs(heightVariation), 0.01);
+    if (maxAbs <= 0.6) {
+      // Old format: -0.5 to 0.5 range
+      return (heightVariation + 0.5) / 1.0;
+    } else {
+      // New format: -1.25 to 1.25 range (from 2.5 scale)
+      return (heightVariation / 2.5) + 0.5;
+    }
+  }
+
   createTiles(tileData = null) {
     // Clear existing tiles
     this.clear();
@@ -52,12 +64,7 @@ export class Tilemap {
           if (savedData.heightValue !== undefined) {
             heightValue = savedData.heightValue;
           } else {
-            const maxAbs = Math.max(Math.abs(savedData.heightVariation), 0.01);
-            if (maxAbs <= 0.6) {
-              heightValue = (savedData.heightVariation + 0.5) / 1.0;
-            } else {
-              heightValue = (savedData.heightVariation / 2.5) + 0.5;
-            }
+            heightValue = this.convertHeightVariationToValue(savedData.heightVariation);
             heightValue = Math.max(0, Math.min(1, heightValue));
           }
         } else {
@@ -90,13 +97,7 @@ export class Tilemap {
           if (savedData.heightValue !== undefined) {
             heightValue = savedData.heightValue;
           } else {
-            // Convert saved heightVariation back to normalized height
-            const maxAbs = Math.max(Math.abs(savedData.heightVariation), 0.01);
-            if (maxAbs <= 0.6) {
-              heightValue = (savedData.heightVariation + 0.5) / 1.0;
-            } else {
-              heightValue = (savedData.heightVariation / 2.5) + 0.5;
-            }
+            heightValue = this.convertHeightVariationToValue(savedData.heightVariation);
             heightValue = Math.max(0, Math.min(1, heightValue));
           }
         } else {
