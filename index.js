@@ -30,7 +30,7 @@ let tilemap = createTilemap(scene, { mapSize: 40, tileSize: 1, tileHeight: 0.1 }
 
 // Initialize systems
 const routeManager = new RouteManager(scene);
-let editor = new Editor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig());
+let editor = new Editor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig(), routeManager);
 const ui = new UIManager();
 const saveLoadManager = new SaveLoadManager();
 
@@ -59,6 +59,10 @@ ui.onRouteModeToggle = (enabled) => {
 
 ui.onObjectDelete = (objectId) => {
   editor.deleteObject(objectId);
+};
+
+ui.onRouteDelete = (routeId) => {
+  routeManager.removeRoute(routeId);
 };
 
 // Save/Load callbacks
@@ -103,7 +107,7 @@ ui.onLoadGame = async (file) => {
     });
     
     // Recreate editor with new tiles and map config
-    editor = new Editor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig());
+    editor = new Editor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig(), routeManager);
     
     // Reconnect editor callbacks
     ui.onModeChange = (mode) => {
@@ -196,6 +200,16 @@ const onMouseDown = (event) => {
 const onMouseMove = (event) => {
   // Handle editor dragging
   editor.handleMouseMove(event);
+  
+  // Update route preview if in route creation mode
+  if (routeManager.isInRouteCreationMode()) {
+    const result = editor.raycast(event);
+    if (result && result.type === 'tile') {
+      routeManager.updatePreviewLine(result.position);
+    } else {
+      routeManager.updatePreviewLine(null);
+    }
+  }
   
   // Handle camera dragging
   if (isDragging && isCameraDragging) {
@@ -294,11 +308,18 @@ const onContextMenu = (event) => {
     return;
   }
   
-  // Show properties panel for objects in edit mode
+  // Show properties panel for objects or routes in edit mode
   if (currentMode === 'EDIT') {
-    const object = editor.handleRightClick(event);
-    if (object) {
-      ui.showPropertiesPanel(object);
+    const result = editor.handleRightClick(event);
+    if (result) {
+      // Check if it's a route or object
+      if (result.id !== undefined && result.waypoints !== undefined) {
+        // It's a route
+        ui.showRoutePropertiesPanel(result);
+      } else {
+        // It's an object
+        ui.showPropertiesPanel(result);
+      }
     } else {
       ui.hidePropertiesPanel();
     }
@@ -313,6 +334,34 @@ const onDoubleClick = (event) => {
   }
 };
 
+// Keyboard handler for delete key
+const onKeyDown = (event) => {
+  // Delete key
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    const currentMode = ui.getCurrentMode();
+    
+    // Don't delete during route creation
+    if (routeManager.isInRouteCreationMode()) {
+      return;
+    }
+    
+    // Delete selected route in EDIT mode
+    if (currentMode === 'EDIT') {
+      if (editor.deleteSelectedRoute()) {
+        ui.hidePropertiesPanel();
+        return;
+      }
+    }
+    
+    // Delete selected object
+    const selectedObject = editor.getSelectedObject();
+    if (selectedObject) {
+      editor.deleteObject(selectedObject.id);
+      ui.hidePropertiesPanel();
+    }
+  }
+};
+
 // Add event listeners
 renderer.domElement.addEventListener('mousedown', onMouseDown);
 renderer.domElement.addEventListener('mousemove', onMouseMove);
@@ -321,6 +370,7 @@ renderer.domElement.addEventListener('mouseleave', onMouseUp); // Stop dragging 
 renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
 renderer.domElement.addEventListener('contextmenu', onContextMenu);
 renderer.domElement.addEventListener('dblclick', onDoubleClick);
+window.addEventListener('keydown', onKeyDown);
 
 // Handle window resize
 window.addEventListener('resize', () => {

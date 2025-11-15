@@ -12,6 +12,7 @@ export class UIManager {
     this.onRouteModeToggle = null;
     this.onObjectDelete = null;
     this.onObjectPropertyChange = null;
+    this.onRouteDelete = null;
     this.onSaveGame = null;
     this.onLoadGame = null;
     this.init();
@@ -243,6 +244,41 @@ export class UIManager {
     deleteBtn.addEventListener('click', () => {
       if (this.onObjectDelete) {
         this.onObjectDelete(objectData.id);
+      }
+      this.hidePropertiesPanel();
+    });
+    this.propertiesPanel.appendChild(deleteBtn);
+  }
+
+  showRoutePropertiesPanel(routeData) {
+    if (!routeData) {
+      this.hidePropertiesPanel();
+      return;
+    }
+
+    this.propertiesPanel.innerHTML = '';
+    this.propertiesPanel.style.display = 'block';
+
+    const title = document.createElement('h3');
+    title.textContent = 'Route Properties';
+    this.propertiesPanel.appendChild(title);
+
+    const idLabel = document.createElement('div');
+    idLabel.className = 'property-row';
+    idLabel.innerHTML = `<strong>ID:</strong> <span>${routeData.id}</span>`;
+    this.propertiesPanel.appendChild(idLabel);
+
+    const waypointsLabel = document.createElement('div');
+    waypointsLabel.className = 'property-row';
+    waypointsLabel.innerHTML = `<strong>Waypoints:</strong> <span>${routeData.waypoints.length}</span>`;
+    this.propertiesPanel.appendChild(waypointsLabel);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'delete-btn';
+    deleteBtn.textContent = 'Delete Route';
+    deleteBtn.addEventListener('click', () => {
+      if (this.onRouteDelete) {
+        this.onRouteDelete(routeData.id);
       }
       this.hidePropertiesPanel();
     });

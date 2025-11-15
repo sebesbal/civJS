@@ -8,6 +8,7 @@ export class RouteManager {
     this.currentRouteWaypoints = [];
     this.isCreatingRoute = false;
     this.previewLine = null;
+    this.selectedRoute = null;
   }
 
   startRouteCreation() {
@@ -28,8 +29,8 @@ export class RouteManager {
     // Add waypoint
     this.currentRouteWaypoints.push(new THREE.Vector3(position.x, position.y + 0.1, position.z));
     
-    // Update preview line
-    this.updatePreviewLine();
+    // Update preview line (without mouse position since we just added a waypoint)
+    this.updatePreviewLine(null);
   }
 
   finishRoute() {
@@ -98,7 +99,11 @@ export class RouteManager {
       geometry: geometry,
       tubeGeometry: tubeGeometry,
       material: material,
-      tubeMaterial: tubeMaterial
+      tubeMaterial: tubeMaterial,
+      originalLineMaterial: material,
+      originalTubeMaterial: tubeMaterial,
+      highlightLineMaterial: null,
+      highlightTubeMaterial: null
     };
     
     return routeData;
@@ -112,28 +117,44 @@ export class RouteManager {
     const geometry = new THREE.BufferGeometry();
     const material = new THREE.LineDashedMaterial({
       color: 0xffff00,
-      dashSize: 0.1,
+      dashSize: 0.2,
       gapSize: 0.1,
-      linewidth: 2
+      linewidth: 3,
+      depthTest: true,
+      depthWrite: false
     });
     
     this.previewLine = new THREE.Line(geometry, material);
-    this.previewLine.computeLineDistances();
+    this.previewLine.renderOrder = 1000; // Render on top
     this.scene.add(this.previewLine);
   }
 
-  updatePreviewLine() {
-    if (!this.previewLine || this.currentRouteWaypoints.length < 2) {
-      if (this.previewLine) {
-        this.previewLine.geometry.setFromPoints([]);
-      }
+  updatePreviewLine(mousePosition = null) {
+    if (!this.previewLine) return;
+
+    // Build waypoints array including mouse position if available
+    const previewWaypoints = [...this.currentRouteWaypoints];
+    
+    // Add mouse position as temporary endpoint if we have at least one waypoint
+    if (mousePosition && previewWaypoints.length > 0) {
+      previewWaypoints.push(new THREE.Vector3(mousePosition.x, mousePosition.y + 0.1, mousePosition.z));
+    }
+
+    // Need at least 2 points to show a line
+    if (previewWaypoints.length < 2) {
+      this.previewLine.geometry.setFromPoints([]);
       return;
     }
 
     // Create temporary curve for preview
-    const curve = new THREE.CatmullRomCurve3(this.currentRouteWaypoints, false, 'centripetal');
+    const curve = new THREE.CatmullRomCurve3(previewWaypoints, false, 'centripetal');
     const points = curve.getPoints(50);
+    
+    // Update geometry
     this.previewLine.geometry.setFromPoints(points);
+    this.previewLine.geometry.attributes.position.needsUpdate = true;
+    
+    // Recompute line distances for dashed material
     this.previewLine.computeLineDistances();
   }
 
@@ -146,11 +167,61 @@ export class RouteManager {
     }
   }
 
+  selectRoute(routeId) {
+    this.deselectRoute();
+    
+    const route = this.routes.find(r => r.id === routeId);
+    if (!route) return null;
+
+    // Create highlight materials
+    const highlightLineMaterial = new THREE.LineBasicMaterial({
+      color: 0xffff00,
+      linewidth: 4
+    });
+    
+    const highlightTubeMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffff00,
+      emissive: 0xaaaa00,
+      emissiveIntensity: 0.5
+    });
+    
+    route.highlightLineMaterial = highlightLineMaterial;
+    route.highlightTubeMaterial = highlightTubeMaterial;
+    route.line.material = highlightLineMaterial;
+    route.tube.material = highlightTubeMaterial;
+    
+    this.selectedRoute = route;
+    return route;
+  }
+
+  deselectRoute() {
+    if (this.selectedRoute) {
+      this.selectedRoute.line.material = this.selectedRoute.originalLineMaterial;
+      this.selectedRoute.tube.material = this.selectedRoute.originalTubeMaterial;
+      
+      if (this.selectedRoute.highlightLineMaterial) {
+        this.selectedRoute.highlightLineMaterial.dispose();
+        this.selectedRoute.highlightLineMaterial = null;
+      }
+      if (this.selectedRoute.highlightTubeMaterial) {
+        this.selectedRoute.highlightTubeMaterial.dispose();
+        this.selectedRoute.highlightTubeMaterial = null;
+      }
+      
+      this.selectedRoute = null;
+    }
+  }
+
   removeRoute(routeId) {
     const index = this.routes.findIndex(route => route.id === routeId);
     if (index === -1) return false;
 
     const route = this.routes[index];
+    
+    // Deselect if this route is selected
+    if (this.selectedRoute && this.selectedRoute.id === routeId) {
+      this.deselectRoute();
+    }
     
     this.scene.remove(route.line);
     this.scene.remove(route.tube);
@@ -158,6 +229,13 @@ export class RouteManager {
     route.tubeGeometry.dispose();
     route.material.dispose();
     route.tubeMaterial.dispose();
+    
+    if (route.highlightLineMaterial) {
+      route.highlightLineMaterial.dispose();
+    }
+    if (route.highlightTubeMaterial) {
+      route.highlightTubeMaterial.dispose();
+    }
     
     this.routes.splice(index, 1);
     return true;
@@ -190,6 +268,25 @@ export class RouteManager {
 
   getCurrentWaypoints() {
     return this.currentRouteWaypoints;
+  }
+
+  getSelectedRoute() {
+    return this.selectedRoute;
+  }
+
+  // Get all route meshes for raycasting
+  getAllRouteMeshes() {
+    const meshes = [];
+    this.routes.forEach(route => {
+      meshes.push(route.line);
+      meshes.push(route.tube);
+    });
+    return meshes;
+  }
+
+  // Find route by mesh (line or tube)
+  findRouteByMesh(mesh) {
+    return this.routes.find(route => route.line === mesh || route.tube === mesh);
   }
 
   // Serialize routes to data array

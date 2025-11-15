@@ -2,11 +2,12 @@ import * as THREE from 'three';
 import { ObjectManager } from './objects.js';
 
 export class Editor {
-  constructor(scene, camera, renderer, tiles, mapConfig = null) {
+  constructor(scene, camera, renderer, tiles, mapConfig = null, routeManager = null) {
     this.scene = scene;
     this.camera = camera;
     this.renderer = renderer;
     this.tiles = tiles; // Array of tile meshes
+    this.routeManager = routeManager;
     
     this.objectManager = new ObjectManager(scene);
     this.raycaster = new THREE.Raycaster();
@@ -67,6 +68,10 @@ export class Editor {
     if (mode === 'VIEW') {
       this.objectManager.deselectObject();
       this.selectedObjectType = null;
+      // Deselect routes when switching to VIEW mode
+      if (this.routeManager) {
+        this.routeManager.deselectRoute();
+      }
     }
   }
 
@@ -104,7 +109,7 @@ export class Editor {
     return new THREE.Vector3(tileWorldX, 0, tileWorldZ);
   }
 
-  // Raycast to find intersection with tiles or objects
+  // Raycast to find intersection with tiles, objects, or routes
   raycast(event) {
     this.updateMousePosition(event);
     this.raycaster.setFromCamera(this.mouse, this.camera);
@@ -122,6 +127,24 @@ export class Editor {
           intersection: objectIntersects[0],
           object: objectData
         };
+      }
+    }
+    
+    // Check routes if routeManager is available
+    if (this.routeManager && !this.routeManager.isInRouteCreationMode()) {
+      const routeMeshes = this.routeManager.getAllRouteMeshes();
+      const routeIntersects = this.raycaster.intersectObjects(routeMeshes);
+      
+      if (routeIntersects.length > 0) {
+        const hitMesh = routeIntersects[0].object;
+        const route = this.routeManager.findRouteByMesh(hitMesh);
+        if (route) {
+          return {
+            type: 'route',
+            intersection: routeIntersects[0],
+            route: route
+          };
+        }
       }
     }
     
@@ -143,11 +166,22 @@ export class Editor {
 
   handleMouseDown(event) {
     if (this.mode === 'VIEW' && !this.isRouteMode) {
+      // Deselect routes when clicking in VIEW mode
+      if (this.routeManager) {
+        this.routeManager.deselectRoute();
+      }
       return false; // Let camera handle it
     }
 
     const result = this.raycast(event);
-    if (!result) return false;
+    if (!result) {
+      // Clicked on empty space - deselect everything
+      if (this.routeManager) {
+        this.routeManager.deselectRoute();
+      }
+      this.objectManager.deselectObject();
+      return false;
+    }
 
     if (this.isRouteMode) {
       // Route creation is handled by routes.js
@@ -155,6 +189,10 @@ export class Editor {
     }
 
     if (result.type === 'object') {
+      // Deselect route if selecting object
+      if (this.routeManager) {
+        this.routeManager.deselectRoute();
+      }
       // Select object
       this.objectManager.selectObject(result.object.id);
       
@@ -165,10 +203,27 @@ export class Editor {
         this.dragStartPosition = new THREE.Vector2(event.clientX, event.clientY);
       }
       return true;
-    } else if (result.type === 'tile' && this.selectedObjectType) {
-      // Place object on tile
-      this.objectManager.createObject(this.selectedObjectType, result.position);
+    } else if (result.type === 'route') {
+      // Deselect object if selecting route
+      this.objectManager.deselectObject();
+      // Select route
+      if (this.routeManager) {
+        this.routeManager.selectRoute(result.route.id);
+      }
       return true;
+    } else if (result.type === 'tile') {
+      if (this.selectedObjectType) {
+        // Place object on tile
+        this.objectManager.createObject(this.selectedObjectType, result.position);
+        return true;
+      } else {
+        // Clicked on empty tile - deselect everything
+        if (this.routeManager) {
+          this.routeManager.deselectRoute();
+        }
+        this.objectManager.deselectObject();
+        return false;
+      }
     }
 
     return false;
@@ -200,9 +255,20 @@ export class Editor {
     if (result && result.type === 'object') {
       // Show properties panel (handled by UI)
       return result.object;
+    } else if (result && result.type === 'route') {
+      // Show route properties panel
+      return result.route;
     }
 
     return null;
+  }
+
+  deleteSelectedRoute() {
+    if (this.routeManager && this.routeManager.getSelectedRoute()) {
+      const route = this.routeManager.getSelectedRoute();
+      return this.routeManager.removeRoute(route.id);
+    }
+    return false;
   }
 
   getObjectManager() {
