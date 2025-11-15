@@ -50,10 +50,14 @@ export class RouteManager {
     return route;
   }
 
-  createRoute(waypoints) {
+  createRoute(waypoints, routeId = null) {
     if (waypoints.length < 2) return null;
 
-    const routeId = this.nextRouteId++;
+    // Use provided ID or generate new one
+    const id = routeId !== null ? routeId : this.nextRouteId++;
+    if (routeId !== null && routeId >= this.nextRouteId) {
+      this.nextRouteId = routeId + 1;
+    }
     
     // Create spline curve
     const curve = new THREE.CatmullRomCurve3(waypoints, false, 'centripetal');
@@ -86,7 +90,7 @@ export class RouteManager {
     this.scene.add(tube);
     
     const routeData = {
-      id: routeId,
+      id: id,
       waypoints: waypoints,
       curve: curve,
       line: line,
@@ -186,6 +190,45 @@ export class RouteManager {
 
   getCurrentWaypoints() {
     return this.currentRouteWaypoints;
+  }
+
+  // Serialize routes to data array
+  serialize() {
+    const routes = this.routes.map(route => {
+      const waypoints = route.waypoints.map(wp => ({
+        x: wp.x,
+        y: wp.y,
+        z: wp.z
+      }));
+      return {
+        id: route.id,
+        waypoints: waypoints
+      };
+    });
+    
+    return {
+      routes: routes,
+      nextRouteId: this.nextRouteId
+    };
+  }
+
+  // Load routes from serialized data
+  loadFromData(routesData, nextRouteId) {
+    // Clear existing routes
+    this.clearAll();
+    
+    // Set next route ID
+    this.nextRouteId = nextRouteId || 0;
+    
+    // Recreate routes with their original IDs
+    if (routesData && Array.isArray(routesData)) {
+      routesData.forEach(routeData => {
+        const waypoints = routeData.waypoints.map(wp => 
+          new THREE.Vector3(wp.x, wp.y, wp.z)
+        );
+        this.createRoute(waypoints, routeData.id);
+      });
+    }
   }
 }
 

@@ -13,7 +13,7 @@ export class ObjectManager {
     this.selectedObject = null;
   }
 
-  createObject(type, position) {
+  createObject(type, position, id = null) {
     const typeDef = ObjectTypes[type];
     if (!typeDef) {
       console.error(`Unknown object type: ${type}`);
@@ -46,9 +46,15 @@ export class ObjectManager {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
+    // Use provided ID or generate new one
+    const objectId = id !== null ? id : this.nextId++;
+    if (id !== null && id >= this.nextId) {
+      this.nextId = id + 1;
+    }
+
     // Store object data
     const objectData = {
-      id: this.nextId++,
+      id: objectId,
       type: type,
       mesh: mesh,
       originalMaterial: material,
@@ -157,6 +163,48 @@ export class ObjectManager {
     });
     this.objects = [];
     this.selectedObject = null;
+  }
+
+  // Serialize objects to data array
+  serialize() {
+    const objects = this.objects.map(obj => {
+      const pos = obj.mesh.position;
+      return {
+        id: obj.id,
+        type: obj.type,
+        position: {
+          x: pos.x,
+          y: pos.y - 0.5, // Subtract base offset to get tile position
+          z: pos.z
+        }
+      };
+    });
+    
+    return {
+      objects: objects,
+      nextId: this.nextId
+    };
+  }
+
+  // Load objects from serialized data
+  loadFromData(objectsData, nextId) {
+    // Clear existing objects
+    this.clearAll();
+    
+    // Set next ID
+    this.nextId = nextId || 0;
+    
+    // Recreate objects with their original IDs
+    if (objectsData && Array.isArray(objectsData)) {
+      objectsData.forEach(objData => {
+        const position = new THREE.Vector3(
+          objData.position.x,
+          objData.position.y,
+          objData.position.z
+        );
+        this.createObject(objData.type, position, objData.id);
+      });
+    }
   }
 }
 

@@ -12,6 +12,8 @@ export class UIManager {
     this.onRouteModeToggle = null;
     this.onObjectDelete = null;
     this.onObjectPropertyChange = null;
+    this.onSaveGame = null;
+    this.onLoadGame = null;
     this.init();
   }
 
@@ -98,6 +100,50 @@ export class UIManager {
     routesSection.appendChild(routeModeBtn);
 
     this.sidebar.appendChild(routesSection);
+
+    // Save/Load section
+    const saveLoadSection = document.createElement('div');
+    saveLoadSection.className = 'sidebar-section';
+    
+    const saveLoadTitle = document.createElement('h3');
+    saveLoadTitle.textContent = 'Save/Load';
+    saveLoadSection.appendChild(saveLoadTitle);
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'save-btn';
+    saveBtn.textContent = 'Save Game';
+    saveBtn.addEventListener('click', () => {
+      if (this.onSaveGame) {
+        this.onSaveGame();
+      }
+    });
+    saveLoadSection.appendChild(saveBtn);
+
+    const loadBtn = document.createElement('button');
+    loadBtn.className = 'load-btn';
+    loadBtn.textContent = 'Load Game';
+    
+    // Create hidden file input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.json';
+    fileInput.style.display = 'none';
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file && this.onLoadGame) {
+        this.onLoadGame(file);
+      }
+      // Reset input so same file can be selected again
+      fileInput.value = '';
+    });
+    document.body.appendChild(fileInput);
+    
+    loadBtn.addEventListener('click', () => {
+      fileInput.click();
+    });
+    saveLoadSection.appendChild(loadBtn);
+
+    this.sidebar.appendChild(saveLoadSection);
   }
 
   createPropertiesPanel() {

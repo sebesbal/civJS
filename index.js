@@ -3,6 +3,7 @@ import { createTilemap } from './tilemap.js';
 import { Editor } from './editor.js';
 import { UIManager } from './ui.js';
 import { RouteManager } from './routes.js';
+import { SaveLoadManager } from './save-load.js';
 
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -24,13 +25,17 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
 directionalLight.position.set(10, 20, 10);
 scene.add(directionalLight);
 
+// Map configuration
+let mapConfig = { mapSize: 40, tileSize: 1, tileHeight: 0.1 };
+
 // Create tilemap
-const tiles = createTilemap(scene, {mapSize: 40, tileSize: 1, tileHeight: 0.1});
+let tiles = createTilemap(scene, mapConfig);
 
 // Initialize systems
 const routeManager = new RouteManager(scene);
-const editor = new Editor(scene, camera, renderer, tiles);
+let editor = new Editor(scene, camera, renderer, tiles);
 const ui = new UIManager();
+const saveLoadManager = new SaveLoadManager();
 
 // Connect UI callbacks
 ui.onModeChange = (mode) => {
@@ -57,6 +62,105 @@ ui.onRouteModeToggle = (enabled) => {
 
 ui.onObjectDelete = (objectId) => {
   editor.deleteObject(objectId);
+};
+
+// Save/Load callbacks
+ui.onSaveGame = () => {
+  try {
+    const objectManager = editor.getObjectManager();
+    const gameStateJson = saveLoadManager.saveGameState(
+      mapConfig,
+      tiles,
+      objectManager,
+      routeManager
+    );
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    saveLoadManager.downloadGameState(gameStateJson, `game-save-${timestamp}.json`);
+    console.log('Game saved successfully');
+  } catch (error) {
+    console.error('Failed to save game:', error);
+    alert('Failed to save game: ' + error.message);
+  }
+};
+
+ui.onLoadGame = async (file) => {
+  try {
+    // Read file
+    const fileContent = await saveLoadManager.readFile(file);
+    
+    // Parse game state
+    const gameState = await saveLoadManager.loadGameState(fileContent);
+    
+    // Clear existing scene objects (keep lights and camera)
+    tiles.forEach(tile => {
+      scene.remove(tile);
+      tile.geometry.dispose();
+      tile.material.dispose();
+    });
+    
+    const objectManager = editor.getObjectManager();
+    objectManager.clearAll();
+    routeManager.clearAll();
+    
+    // Update map config
+    mapConfig = gameState.mapConfig;
+    
+    // Recreate tilemap with saved data
+    tiles = createTilemap(scene, {
+      mapSize: mapConfig.mapSize,
+      tileSize: mapConfig.tileSize,
+      tileHeight: mapConfig.tileHeight,
+      tileData: gameState.tiles
+    });
+    
+    // Recreate editor with new tiles
+    editor = new Editor(scene, camera, renderer, tiles);
+    
+    // Reconnect editor callbacks
+    ui.onModeChange = (mode) => {
+      editor.setMode(mode);
+      if (mode === 'VIEW') {
+        routeManager.cancelRouteCreation();
+      }
+    };
+    
+    ui.onObjectTypeSelect = (type) => {
+      editor.setSelectedObjectType(type);
+    };
+    
+    ui.onObjectDelete = (objectId) => {
+      editor.deleteObject(objectId);
+    };
+    
+    ui.onRouteModeToggle = (enabled) => {
+      if (enabled) {
+        routeManager.startRouteCreation();
+        editor.setRouteMode(true);
+        editor.setMode('EDIT'); // Switch to edit mode for route creation
+      } else {
+        routeManager.cancelRouteCreation();
+        editor.setRouteMode(false);
+      }
+    };
+    
+    // Load objects
+    const newObjectManager = editor.getObjectManager();
+    newObjectManager.loadFromData(gameState.objects, gameState.nextObjectId);
+    
+    // Load routes
+    routeManager.loadFromData(gameState.routes, gameState.nextRouteId);
+    
+    // Reset camera to default position
+    camera.position.set(15, 20, 15);
+    cameraTarget.set(0, 0, 0);
+    camera.lookAt(cameraTarget);
+    currentZoomDistance = camera.position.distanceTo(cameraTarget);
+    
+    console.log('Game loaded successfully');
+  } catch (error) {
+    console.error('Failed to load game:', error);
+    alert('Failed to load game: ' + error.message);
+  }
 };
 
 // Mouse camera controls
