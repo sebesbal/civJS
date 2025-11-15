@@ -1,16 +1,5 @@
 import * as THREE from 'three';
-
-// Tile colors for variety (grass, dirt, sand, stone, etc.)
-const tileColors = [
-  0x4a7c59, // Dark green (forest)
-  0x6b8e23, // Olive green (grass)
-  0x8b7355, // Brown (dirt)
-  0xc2b280, // Beige (sand)
-  0x708090, // Slate gray (stone)
-  0x556b2f, // Dark olive (grass)
-  0x9acd32, // Yellow green (lush grass)
-  0xdaa520, // Goldenrod (dry grass)
-];
+import { TileTypes } from './config/tile-types.js';
 
 export function createTilemap(scene, options = {}) {
   const mapSize = options.mapSize || 20;
@@ -20,9 +9,10 @@ export function createTilemap(scene, options = {}) {
 
   for (let x = 0; x < mapSize; x++) {
     for (let z = 0; z < mapSize; z++) {
-      // Random tile color
-      const colorIndex = Math.floor(Math.random() * tileColors.length);
-      const color = tileColors[colorIndex];
+      // Random tile type
+      const tileTypeIndex = Math.floor(Math.random() * TileTypes.length);
+      const tileType = TileTypes[tileTypeIndex];
+      const color = tileType.color;
       
       // Slight random height variation for visual interest
       const heightVariation = (Math.random() - 0.5) * 0.1;
