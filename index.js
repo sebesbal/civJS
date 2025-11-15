@@ -25,7 +25,7 @@ directionalLight.position.set(10, 20, 10);
 scene.add(directionalLight);
 
 // Create tilemap
-const tiles = createTilemap(scene);
+const tiles = createTilemap(scene, {mapSize: 40, tileSize: 1, tileHeight: 0.1});
 
 // Initialize systems
 const routeManager = new RouteManager(scene);

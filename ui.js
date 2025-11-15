@@ -1,4 +1,5 @@
 // UI Manager for the strategic game editor
+import { ObjectTypes } from './objects.js';
 
 export class UIManager {
   constructor() {
@@ -56,12 +57,11 @@ export class UIManager {
     objectsTitle.textContent = 'Place Objects';
     objectsSection.appendChild(objectsTitle);
 
-    const objectTypes = [
-      { key: 'CITY', name: 'City' },
-      { key: 'FACTORY', name: 'Factory' },
-      { key: 'RESOURCE', name: 'Resource' },
-      { key: 'UNIT', name: 'Unit' }
-    ];
+    // Dynamically generate object types from ObjectTypes definition
+    const objectTypes = Object.keys(ObjectTypes).map(key => ({
+      key: key,
+      name: ObjectTypes[key].name
+    }));
 
     objectTypes.forEach(type => {
       const btn = document.createElement('button');
@@ -208,13 +208,13 @@ export class UIManager {
   }
 
   getColorForType(type) {
-    const colors = {
-      'CITY': '#ff6b6b',
-      'FACTORY': '#4ecdc4',
-      'RESOURCE': '#ffe66d',
-      'UNIT': '#95e1d3'
-    };
-    return colors[type] || '#ffffff';
+    // Dynamically get color from ObjectTypes definition
+    const typeDef = ObjectTypes[type];
+    if (!typeDef) {
+      return '#ffffff';
+    }
+    // Convert THREE.js hex color (0xff6b6b) to CSS hex color (#ff6b6b)
+    return '#' + typeDef.color.toString(16).padStart(6, '0');
   }
 
   getCurrentMode() {
