@@ -6,11 +6,16 @@ export { ObjectTypes };
 
 // Object manager class
 export class ObjectManager {
-  constructor(scene) {
+  constructor(scene, tilemap = null) {
     this.scene = scene;
+    this.tilemap = tilemap;
     this.objects = [];
     this.nextId = 0;
     this.selectedObject = null;
+  }
+
+  setTilemap(tilemap) {
+    this.tilemap = tilemap;
   }
 
   createObject(type, position, id = null) {
@@ -41,8 +46,18 @@ export class ObjectManager {
     const material = new THREE.MeshStandardMaterial({ color: typeDef.color });
     const mesh = new THREE.Mesh(geometry, material);
     
-    // Position on top of tile
-    mesh.position.set(position.x, position.y + 0.5, position.z);
+    // Calculate object height offset so it sits on top of the tile surface
+    let heightOffset = 0;
+    if (typeDef.shape === 'cylinder') {
+      heightOffset = typeDef.size.height / 2;
+    } else if (typeDef.shape === 'box') {
+      heightOffset = typeDef.size.height / 2;
+    } else if (typeDef.shape === 'sphere') {
+      heightOffset = typeDef.size.radius;
+    }
+    
+    // Position object on top of tile (position.y is the tile top surface)
+    mesh.position.set(position.x, position.y + heightOffset, position.z);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
@@ -169,12 +184,24 @@ export class ObjectManager {
   serialize() {
     const objects = this.objects.map(obj => {
       const pos = obj.mesh.position;
+      const typeDef = ObjectTypes[obj.type];
+      
+      // Calculate height offset to get back to tile surface position
+      let heightOffset = 0;
+      if (typeDef.shape === 'cylinder') {
+        heightOffset = typeDef.size.height / 2;
+      } else if (typeDef.shape === 'box') {
+        heightOffset = typeDef.size.height / 2;
+      } else if (typeDef.shape === 'sphere') {
+        heightOffset = typeDef.size.radius;
+      }
+      
       return {
         id: obj.id,
         type: obj.type,
         position: {
           x: pos.x,
-          y: pos.y - 0.5, // Subtract base offset to get tile position
+          y: pos.y - heightOffset, // Subtract height offset to get tile surface position
           z: pos.z
         }
       };
@@ -197,9 +224,15 @@ export class ObjectManager {
     // Recreate objects with their original IDs
     if (objectsData && Array.isArray(objectsData)) {
       objectsData.forEach(objData => {
+        // Use saved position, but if tilemap is available, use actual tile top surface
+        let yPosition = objData.position.y;
+        if (this.tilemap) {
+          yPosition = this.tilemap.getTileTopSurface(objData.position.x, objData.position.z);
+        }
+        
         const position = new THREE.Vector3(
           objData.position.x,
-          objData.position.y,
+          yPosition,
           objData.position.z
         );
         this.createObject(objData.type, position, objData.id);

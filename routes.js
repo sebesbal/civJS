@@ -1,14 +1,31 @@
 import * as THREE from 'three';
 
 export class RouteManager {
-  constructor(scene) {
+  constructor(scene, tilemap = null) {
     this.scene = scene;
+    this.tilemap = tilemap;
     this.routes = [];
     this.nextRouteId = 0;
     this.currentRouteWaypoints = [];
     this.isCreatingRoute = false;
     this.previewLine = null;
     this.selectedRoute = null;
+  }
+
+  setTilemap(tilemap) {
+    this.tilemap = tilemap;
+  }
+
+  // Get the Y position on top of the tile at the given x, z coordinates
+  // Adds a small offset to keep routes above the tile surface
+  getTileTopY(x, z) {
+    if (this.tilemap) {
+      const tileTop = this.tilemap.getTileTopSurface(x, z);
+      // Add offset to keep route above tile (route tube radius is 0.05, so 0.1 should be safe)
+      return tileTop + 0.2;
+    }
+    // Fallback: add small offset if tilemap not available
+    return 0.25;
   }
 
   startRouteCreation() {
@@ -26,8 +43,11 @@ export class RouteManager {
   addWaypoint(position) {
     if (!this.isCreatingRoute) return;
 
-    // Add waypoint
-    this.currentRouteWaypoints.push(new THREE.Vector3(position.x, position.y + 0.1, position.z));
+    // Get tile top surface Y position
+    const tileTopY = this.getTileTopY(position.x, position.z);
+    
+    // Add waypoint on top of tile
+    this.currentRouteWaypoints.push(new THREE.Vector3(position.x, tileTopY, position.z));
     
     // Update preview line (without mouse position since we just added a waypoint)
     this.updatePreviewLine(null);
@@ -137,7 +157,9 @@ export class RouteManager {
     
     // Add mouse position as temporary endpoint if we have at least one waypoint
     if (mousePosition && previewWaypoints.length > 0) {
-      previewWaypoints.push(new THREE.Vector3(mousePosition.x, mousePosition.y + 0.1, mousePosition.z));
+      // Get tile top surface Y position for the mouse position
+      const tileTopY = this.getTileTopY(mousePosition.x, mousePosition.z);
+      previewWaypoints.push(new THREE.Vector3(mousePosition.x, tileTopY, mousePosition.z));
     }
 
     // Need at least 2 points to show a line
@@ -320,9 +342,12 @@ export class RouteManager {
     // Recreate routes with their original IDs
     if (routesData && Array.isArray(routesData)) {
       routesData.forEach(routeData => {
-        const waypoints = routeData.waypoints.map(wp => 
-          new THREE.Vector3(wp.x, wp.y, wp.z)
-        );
+        // Use saved waypoints, but update Y positions to match current tile top surfaces
+        const waypoints = routeData.waypoints.map(wp => {
+          // If tilemap is available, use actual tile top surface
+          const yPosition = this.tilemap ? this.tilemap.getTileTopSurface(wp.x, wp.z) : wp.y;
+          return new THREE.Vector3(wp.x, yPosition, wp.z);
+        });
         this.createRoute(waypoints, routeData.id);
       });
     }

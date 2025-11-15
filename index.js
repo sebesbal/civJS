@@ -29,8 +29,10 @@ scene.add(directionalLight);
 let tilemap = createTilemap(scene, { mapSize: 40, tileSize: 1, tileHeight: 0.1 });
 
 // Initialize systems
-const routeManager = new RouteManager(scene);
+const routeManager = new RouteManager(scene, tilemap);
 let editor = new Editor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig(), routeManager);
+// Set tilemap reference in object manager for proper object positioning
+editor.getObjectManager().setTilemap(tilemap);
 const ui = new UIManager();
 const saveLoadManager = new SaveLoadManager();
 
@@ -138,9 +140,11 @@ ui.onLoadGame = async (file) => {
     
     // Load objects
     const newObjectManager = editor.getObjectManager();
+    newObjectManager.setTilemap(tilemap); // Set tilemap reference for proper positioning
     newObjectManager.loadFromData(gameState.objects, gameState.nextObjectId);
     
     // Load routes
+    routeManager.setTilemap(tilemap); // Set tilemap reference for proper positioning
     routeManager.loadFromData(gameState.routes, gameState.nextRouteId);
     
     // Reset camera to default position

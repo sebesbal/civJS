@@ -214,7 +214,14 @@ export class Editor {
     } else if (result.type === 'tile') {
       if (this.selectedObjectType) {
         // Place object on tile
-        this.objectManager.createObject(this.selectedObjectType, result.position);
+        // Get the clicked tile to find its top surface
+        const clickedTile = result.intersection.object;
+        const tileTopY = clickedTile.position.y + (clickedTile.geometry.parameters.height / 2);
+        
+        var position = result.position.clone();
+        position.y = tileTopY; // Position object on top of the tile
+        
+        this.objectManager.createObject(this.selectedObjectType, position);
         return true;
       } else {
         // Clicked on empty tile - deselect everything
@@ -233,7 +240,14 @@ export class Editor {
     if (this.isDraggingObject && this.dragObject) {
       const result = this.raycast(event);
       if (result && result.type === 'tile') {
-        this.objectManager.moveObject(this.dragObject.id, result.position);
+        // Get the clicked tile to find its top surface
+        const clickedTile = result.intersection.object;
+        const tileTopY = clickedTile.position.y + (clickedTile.geometry.parameters.height / 2);
+        
+        const position = result.position.clone();
+        position.y = tileTopY; // Position object on top of the tile
+        
+        this.objectManager.moveObject(this.dragObject.id, position);
       }
     }
   }
