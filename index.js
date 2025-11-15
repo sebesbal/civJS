@@ -25,15 +25,12 @@ const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
 directionalLight.position.set(10, 20, 10);
 scene.add(directionalLight);
 
-// Map configuration
-let mapConfig = { mapSize: 40, tileSize: 1, tileHeight: 0.1 };
-
 // Create tilemap
-let tiles = createTilemap(scene, mapConfig);
+let tilemap = createTilemap(scene, { mapSize: 40, tileSize: 1, tileHeight: 0.1 });
 
 // Initialize systems
 const routeManager = new RouteManager(scene);
-let editor = new Editor(scene, camera, renderer, tiles);
+let editor = new Editor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig());
 const ui = new UIManager();
 const saveLoadManager = new SaveLoadManager();
 
@@ -69,8 +66,7 @@ ui.onSaveGame = () => {
   try {
     const objectManager = editor.getObjectManager();
     const gameStateJson = saveLoadManager.saveGameState(
-      mapConfig,
-      tiles,
+      tilemap,
       objectManager,
       routeManager
     );
@@ -92,29 +88,22 @@ ui.onLoadGame = async (file) => {
     const gameState = await saveLoadManager.loadGameState(fileContent);
     
     // Clear existing scene objects (keep lights and camera)
-    tiles.forEach(tile => {
-      scene.remove(tile);
-      tile.geometry.dispose();
-      tile.material.dispose();
-    });
+    tilemap.clear();
     
     const objectManager = editor.getObjectManager();
     objectManager.clearAll();
     routeManager.clearAll();
     
-    // Update map config
-    mapConfig = gameState.mapConfig;
-    
     // Recreate tilemap with saved data
-    tiles = createTilemap(scene, {
-      mapSize: mapConfig.mapSize,
-      tileSize: mapConfig.tileSize,
-      tileHeight: mapConfig.tileHeight,
+    tilemap = createTilemap(scene, {
+      mapSize: gameState.mapConfig.mapSize,
+      tileSize: gameState.mapConfig.tileSize,
+      tileHeight: gameState.mapConfig.tileHeight,
       tileData: gameState.tiles
     });
     
-    // Recreate editor with new tiles
-    editor = new Editor(scene, camera, renderer, tiles);
+    // Recreate editor with new tiles and map config
+    editor = new Editor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig());
     
     // Reconnect editor callbacks
     ui.onModeChange = (mode) => {

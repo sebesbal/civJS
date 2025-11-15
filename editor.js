@@ -2,11 +2,11 @@ import * as THREE from 'three';
 import { ObjectManager } from './objects.js';
 
 export class Editor {
-  constructor(scene, camera, renderer, tiles) {
+  constructor(scene, camera, renderer, tiles, mapConfig = null) {
     this.scene = scene;
     this.camera = camera;
     this.renderer = renderer;
-    this.tiles = tiles;
+    this.tiles = tiles; // Array of tile meshes
     
     this.objectManager = new ObjectManager(scene);
     this.raycaster = new THREE.Raycaster();
@@ -21,9 +21,37 @@ export class Editor {
     this.dragStartPosition = null;
     this.dragObject = null;
     
-    // Tile grid info (from tilemap)
-    this.tileSize = 1;
-    this.mapSize = 20;
+    // Tile grid info (from mapConfig or calculated from tiles)
+    if (mapConfig) {
+      this.tileSize = mapConfig.tileSize || 1;
+      this.mapSize = mapConfig.mapSize || 20;
+    } else {
+      // Calculate from tiles if mapConfig not provided
+      // Find the maximum grid coordinates from tile userData
+      let maxX = 0;
+      let maxZ = 0;
+      tiles.forEach(tile => {
+        if (tile.userData && tile.userData.gridX !== undefined) {
+          maxX = Math.max(maxX, tile.userData.gridX);
+          maxZ = Math.max(maxZ, tile.userData.gridZ);
+        }
+      });
+      this.mapSize = Math.max(maxX, maxZ) + 1;
+      // Calculate tileSize from first tile's position
+      if (tiles.length > 0) {
+        const firstTile = tiles[0];
+        const secondTile = tiles.find(t => 
+          t.userData && t.userData.gridX === 1 && t.userData.gridZ === 0
+        );
+        if (secondTile) {
+          this.tileSize = Math.abs(secondTile.position.x - firstTile.position.x);
+        } else {
+          this.tileSize = 1;
+        }
+      } else {
+        this.tileSize = 1;
+      }
+    }
     this.tileOffset = (this.mapSize * this.tileSize) / 2 - this.tileSize / 2;
     
     this.setupEventListeners();

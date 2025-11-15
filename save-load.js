@@ -1,5 +1,4 @@
 // Save/Load Manager for game state persistence
-import { getTileData } from './tilemap.js';
 
 export class SaveLoadManager {
   constructor() {
@@ -7,10 +6,11 @@ export class SaveLoadManager {
   }
 
   // Serialize game state to JSON
-  saveGameState(mapConfig, tiles, objectManager, routeManager) {
+  saveGameState(tilemap, objectManager, routeManager) {
     try {
-      // Get tile data
-      const tileData = getTileData(tiles, mapConfig);
+      // Get tile data and config from tilemap
+      const tileData = tilemap.getTileData();
+      const mapConfig = tilemap.getConfig();
       
       // Get object data
       const objectData = objectManager.serialize();
