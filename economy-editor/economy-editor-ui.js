@@ -24,6 +24,15 @@ export class EconomyEditorUI {
     
     this.selectedNodeId = null;
     
+    // Camera controls
+    this.isPanning = false;
+    this.panStart = null;
+    this.cameraStartPosition = null;
+    this.minZoom = 2;
+    this.maxZoom = 1000; // Will be calculated based on graph size
+    this.currentZoom = 20; // Initial zoom level
+    this.calculatedMaxZoom = null; // Calculated max zoom based on graph size
+    
     // Callbacks
     this.onSaveEconomy = null;
     this.onLoadEconomy = null;
@@ -31,10 +40,43 @@ export class EconomyEditorUI {
     this.init();
   }
 
-  init() {
+  async init() {
     this.createUI();
     this.setupThreeJS();
     this.updateNodeList();
+    
+    // Load default economy file if it exists, then initialize visualizer
+    try {
+      await this.loadDefaultEconomy();
+    } catch (error) {
+      // Silently fail if default file doesn't exist - this is expected for new installations
+      if (error.message && error.message.includes('404')) {
+        console.log('No default economy file found, starting with empty economy');
+      } else {
+        console.warn('Error loading default economy:', error);
+      }
+    }
+    
+    // Initialize visualizer with the economy manager (after loading default if available)
+    try {
+      await this.visualizer.setEconomyManager(this.economyManager);
+    } catch (err) {
+      console.error('Error initializing visualizer:', err);
+    }
+  }
+
+  // Load default economy file
+  async loadDefaultEconomy() {
+    try {
+      const economyData = await this.saveLoadManager.loadEconomyFromPath('economy-editor/economy-default.json');
+      this.economyManager.loadFromData(economyData);
+      this.deselectNode();
+      this.updateNodeList();
+      console.log('Default economy loaded successfully');
+    } catch (error) {
+      // Re-throw to let caller handle it
+      throw error;
+    }
   }
 
   createUI() {
@@ -179,10 +221,11 @@ export class EconomyEditorUI {
 
     // Create visualizer
     this.visualizer = new EconomyVisualizer(this.scene, this.camera, this.renderer);
-    // Set economy manager asynchronously
-    this.visualizer.setEconomyManager(this.economyManager).catch(err => {
-      console.error('Error initializing visualizer:', err);
-    });
+    // Store reference for default economy loading (will be set after loading default economy)
+    this.visualizerReady = Promise.resolve();
+
+    // Camera controls
+    this.setupCameraControls();
 
     // Handle canvas clicks
     this.renderer.domElement.addEventListener('click', (e) => this.handleCanvasClick(e));
@@ -194,11 +237,169 @@ export class EconomyEditorUI {
     this.animate();
   }
 
+  setupCameraControls() {
+    // Initialize pan state
+    this.panStart = new THREE.Vector2();
+    this.cameraStartPosition = new THREE.Vector2();
+
+    const canvas = this.renderer.domElement;
+
+    // Mouse down - start panning
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 0) { // Left mouse button
+        this.isPanning = true;
+        this.panStart.set(e.clientX, e.clientY);
+        this.cameraStartPosition.set(this.camera.position.x, this.camera.position.y);
+        canvas.style.cursor = 'grabbing';
+      }
+    });
+
+    // Mouse move - pan camera
+    canvas.addEventListener('mousemove', (e) => {
+      if (this.isPanning) {
+        const deltaX = e.clientX - this.panStart.x;
+        const deltaY = e.clientY - this.panStart.y;
+
+        // Convert screen delta to world delta
+        const rect = canvas.getBoundingClientRect();
+        const aspect = rect.width / rect.height;
+        const viewSize = this.currentZoom;
+        const worldDeltaX = (deltaX / rect.width) * (viewSize * 2 * aspect);
+        const worldDeltaY = -(deltaY / rect.height) * (viewSize * 2); // Negative for correct Y direction
+
+        this.camera.position.x = this.cameraStartPosition.x - worldDeltaX;
+        this.camera.position.y = this.cameraStartPosition.y - worldDeltaY;
+        this.camera.lookAt(this.camera.position.x, this.camera.position.y, 0);
+      }
+    });
+
+    // Mouse up - stop panning
+    canvas.addEventListener('mouseup', (e) => {
+      if (e.button === 0) {
+        this.isPanning = false;
+        canvas.style.cursor = 'default';
+      }
+    });
+
+    // Mouse leave - stop panning
+    canvas.addEventListener('mouseleave', () => {
+      this.isPanning = false;
+      canvas.style.cursor = 'default';
+    });
+
+    // Wheel - zoom
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      
+      // Smoother zoom - use exponential scaling with smaller multiplier
+      const zoomSpeed = 0.002; // Small multiplier for smooth zooming
+      const zoomDelta = e.deltaY * zoomSpeed;
+      let newZoom = this.currentZoom * (1 + zoomDelta);
+      
+      // Calculate max zoom if not already calculated
+      if (this.calculatedMaxZoom === null) {
+        this.calculateMaxZoom();
+      }
+      
+      // Clamp zoom to limits
+      const maxZoom = this.calculatedMaxZoom || this.maxZoom;
+      newZoom = Math.max(this.minZoom, Math.min(maxZoom, newZoom));
+      
+      if (newZoom !== this.currentZoom) {
+        this.currentZoom = newZoom;
+        if (this.visualizer) {
+          this.visualizer.updateCameraViewSize(this.currentZoom);
+        }
+      }
+    });
+  }
+
   animate() {
     requestAnimationFrame(() => this.animate());
     if (this.renderer && this.scene && this.camera) {
       this.renderer.render(this.scene, this.camera);
     }
+  }
+
+  calculateMaxZoom() {
+    if (!this.economyManager || !this.visualizer) {
+      this.calculatedMaxZoom = 100; // Default fallback
+      return;
+    }
+    
+    const nodes = this.economyManager.getAllNodes();
+    if (nodes.length === 0) {
+      this.calculatedMaxZoom = 100; // Default fallback
+      return;
+    }
+    
+    // Get bounding box from layout
+    const layout = this.visualizer.layout;
+    if (!layout) {
+      this.calculatedMaxZoom = 100; // Default fallback
+      return;
+    }
+    
+    const bbox = layout.getBoundingBox(this.economyManager);
+    const width = bbox.maxX - bbox.minX;
+    const height = bbox.maxY - bbox.minY;
+    const maxDim = Math.max(width, height);
+    
+    if (maxDim === 0) {
+      this.calculatedMaxZoom = 100; // Default fallback
+      return;
+    }
+    
+    // Calculate view size to fit the graph with padding
+    const padding = 2;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const aspect = rect.width / rect.height || 1;
+    
+    // Calculate view size needed to fit the graph
+    let viewSize;
+    if (width / height > aspect) {
+      // Graph is wider than viewport aspect ratio
+      viewSize = (maxDim / 2) + padding;
+    } else {
+      // Graph is taller than viewport aspect ratio
+      viewSize = ((maxDim / 2) + padding) / aspect;
+    }
+    
+    // Ensure we don't go below min zoom
+    viewSize = Math.max(this.minZoom, viewSize);
+    
+    // Set calculated max zoom (this is the zoom level that fits the graph)
+    this.calculatedMaxZoom = viewSize;
+  }
+
+  fitGraphToScreen() {
+    if (this.calculatedMaxZoom === null) {
+      this.calculateMaxZoom();
+    }
+    
+    if (!this.economyManager || !this.visualizer || !this.camera) return;
+    
+    const nodes = this.economyManager.getAllNodes();
+    if (nodes.length === 0) return;
+    
+    // Get bounding box from layout
+    const layout = this.visualizer.layout;
+    if (!layout) return;
+    
+    const bbox = layout.getBoundingBox(this.economyManager);
+    
+    // Use calculated max zoom
+    const viewSize = this.calculatedMaxZoom || 20;
+    
+    // Update zoom to fit
+    this.currentZoom = viewSize;
+    this.visualizer.updateCameraViewSize(this.currentZoom);
+    
+    // Center camera on graph
+    const centerX = (bbox.minX + bbox.maxX) / 2;
+    const centerY = (bbox.minY + bbox.maxY) / 2;
+    this.camera.position.set(centerX, centerY, 10);
+    this.camera.lookAt(centerX, centerY, 0);
   }
 
   handleResize() {
@@ -207,9 +408,9 @@ export class EconomyEditorUI {
     const width = this.canvasContainer.clientWidth;
     const height = this.canvasContainer.clientHeight;
     
-    // Update orthographic camera bounds
+    // Update orthographic camera bounds with current zoom level
     const aspect = width / height;
-    const viewSize = 20;
+    const viewSize = this.currentZoom || 20;
     this.camera.left = -viewSize * aspect;
     this.camera.right = viewSize * aspect;
     this.camera.top = viewSize;
@@ -497,6 +698,9 @@ export class EconomyEditorUI {
   async updateVisualization() {
     if (this.visualizer) {
       await this.visualizer.updateVisualization();
+      // Recalculate max zoom after visualization updates
+      this.calculatedMaxZoom = null;
+      this.calculateMaxZoom();
     }
   }
 

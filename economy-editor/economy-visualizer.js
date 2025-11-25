@@ -15,6 +15,7 @@ export class EconomyVisualizer {
     this.connectionLines = new Map(); // Map<connectionKey, THREE.Line>
     this.selectedNodeId = null;
     this.imageTextures = new Map(); // Map<imagePath, THREE.Texture>
+    this.cameraInitialized = false;
     
     // Node appearance
     this.nodeWidth = 2;
@@ -160,8 +161,11 @@ export class EconomyVisualizer {
       }
     }
 
-    // Update camera to view entire DAG
-    this.updateCamera();
+    // Initialize camera with fixed scale (only on first load)
+    if (!this.cameraInitialized) {
+      this.initializeCamera();
+      this.cameraInitialized = true;
+    }
   }
 
   // Create a 2D rounded rectangle mesh for a node
@@ -331,42 +335,41 @@ export class EconomyVisualizer {
     this.selectedNodeId = null;
   }
 
-  // Update camera to view entire DAG (2D view - straight down)
-  updateCamera() {
-    if (!this.economyManager || this.economyManager.getAllNodes().length === 0) {
-      return;
-    }
-
-    const bbox = this.layout.getBoundingBox(this.economyManager);
-    const centerX = (bbox.minX + bbox.maxX) / 2;
-    const centerY = (bbox.minY + bbox.maxY) / 2;
-
-    const width = bbox.maxX - bbox.minX;
-    const height = bbox.maxY - bbox.minY;
-    const maxDim = Math.max(width, height);
-
-    // For orthographic camera, adjust the view size instead of position
-    if (this.camera.isOrthographicCamera) {
-      const padding = 2; // Add padding around the DAG
-      const viewSize = Math.max(maxDim / 2 + padding, 5); // Minimum view size
-      const aspect = this.renderer.domElement.width / this.renderer.domElement.height || 1;
-      
-      this.camera.left = -viewSize * aspect;
-      this.camera.right = viewSize * aspect;
-      this.camera.top = viewSize;
-      this.camera.bottom = -viewSize;
-      
-      // Center the camera
-      this.camera.position.set(centerX, centerY, 10);
-      this.camera.lookAt(centerX, centerY, 0);
-    } else {
-      // Fallback for perspective camera
-      const distance = maxDim * 1.2;
-      this.camera.position.set(centerX, centerY, distance);
-      this.camera.lookAt(centerX, centerY, 0);
-    }
+  // Initialize camera with fixed scale (don't auto-fit)
+  initializeCamera() {
+    if (!this.camera.isOrthographicCamera) return;
     
+    // Fixed view size at startup
+    const fixedViewSize = 20;
+    const aspect = this.renderer.domElement.width / this.renderer.domElement.height || 1;
+    
+    this.camera.left = -fixedViewSize * aspect;
+    this.camera.right = fixedViewSize * aspect;
+    this.camera.top = fixedViewSize;
+    this.camera.bottom = -fixedViewSize;
+    
+    // Center at origin
+    this.camera.position.set(0, 0, 10);
+    this.camera.lookAt(0, 0, 0);
     this.camera.updateProjectionMatrix();
+  }
+
+  // Update camera view size (for zoom)
+  updateCameraViewSize(viewSize) {
+    if (!this.camera.isOrthographicCamera) return;
+    
+    const aspect = this.renderer.domElement.width / this.renderer.domElement.height || 1;
+    this.camera.left = -viewSize * aspect;
+    this.camera.right = viewSize * aspect;
+    this.camera.top = viewSize;
+    this.camera.bottom = -viewSize;
+    this.camera.updateProjectionMatrix();
+  }
+
+  // Get current view size
+  getCurrentViewSize() {
+    if (!this.camera.isOrthographicCamera) return 20;
+    return this.camera.top;
   }
 
   // Raycast to find node under mouse

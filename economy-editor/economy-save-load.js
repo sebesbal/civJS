@@ -65,5 +65,20 @@ export class EconomySaveLoadManager {
       reader.readAsText(file);
     });
   }
+
+  // Load economy data from a URL/path
+  async loadEconomyFromPath(path) {
+    try {
+      const response = await fetch(path);
+      if (!response.ok) {
+        throw new Error(`Failed to load ${path}: ${response.statusText}`);
+      }
+      const text = await response.text();
+      return await this.loadEconomyData(text);
+    } catch (error) {
+      console.error(`Error loading economy from ${path}:`, error);
+      throw error;
+    }
+  }
 }
 
