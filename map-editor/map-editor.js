@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { ObjectManager } from './objects.js';
 
-export class Editor {
+export class MapEditor {
   constructor(scene, camera, renderer, tiles, mapConfig = null, routeManager = null) {
     this.scene = scene;
     this.camera = camera;

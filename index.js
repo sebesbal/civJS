@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import { createTilemap } from './tilemap.js';
-import { Editor } from './editor.js';
+import { createTilemap } from './map-editor/tilemap.js';
+import { MapEditor } from './map-editor/map-editor.js';
 import { UIManager } from './ui.js';
-import { RouteManager } from './routes.js';
-import { SaveLoadManager } from './save-load.js';
-import { CameraController } from './camera-controller.js';
+import { RouteManager } from './map-editor/routes.js';
+import { SaveLoadManager } from './map-editor/save-load.js';
+import { CameraController } from './map-editor/camera-controller.js';
 
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -34,38 +34,38 @@ let tilemap = createTilemap(scene, { mapSize: 40, tileSize: 1, tileHeight: 0.1 }
 
 // Initialize systems
 const routeManager = new RouteManager(scene, tilemap);
-let editor = new Editor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig(), routeManager);
+let mapEditor = new MapEditor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig(), routeManager);
 // Set tilemap reference in object manager for proper object positioning
-editor.getObjectManager().setTilemap(tilemap);
+mapEditor.getObjectManager().setTilemap(tilemap);
 const ui = new UIManager();
 const saveLoadManager = new SaveLoadManager();
 
 // Helper function to setup UI callbacks
-function setupUICallbacks(ui, editor, routeManager) {
+function setupUICallbacks(ui, mapEditor, routeManager) {
   ui.onModeChange = (mode) => {
-    editor.setMode(mode);
+    mapEditor.setMode(mode);
     if (mode === 'VIEW') {
       routeManager.cancelRouteCreation();
     }
   };
 
   ui.onObjectTypeSelect = (type) => {
-    editor.setSelectedObjectType(type);
+    mapEditor.setSelectedObjectType(type);
   };
 
   ui.onRouteModeToggle = (enabled) => {
     if (enabled) {
       routeManager.startRouteCreation();
-      editor.setRouteMode(true);
-      editor.setMode('EDIT');
+      mapEditor.setRouteMode(true);
+      mapEditor.setMode('EDIT');
     } else {
       routeManager.cancelRouteCreation();
-      editor.setRouteMode(false);
+      mapEditor.setRouteMode(false);
     }
   };
 
   ui.onObjectDelete = (objectId) => {
-    editor.deleteObject(objectId);
+    mapEditor.deleteObject(objectId);
   };
 
   ui.onRouteDelete = (routeId) => {
@@ -74,12 +74,12 @@ function setupUICallbacks(ui, editor, routeManager) {
 }
 
 // Connect UI callbacks
-setupUICallbacks(ui, editor, routeManager);
+setupUICallbacks(ui, mapEditor, routeManager);
 
 // Save/Load callbacks
 ui.onSaveGame = () => {
   try {
-    const objectManager = editor.getObjectManager();
+    const objectManager = mapEditor.getObjectManager();
     const gameStateJson = saveLoadManager.saveGameState(
       tilemap,
       objectManager,
@@ -105,7 +105,7 @@ ui.onLoadGame = async (file) => {
     // Clear existing scene objects (keep lights and camera)
     tilemap.clear();
     
-    const objectManager = editor.getObjectManager();
+    const objectManager = mapEditor.getObjectManager();
     objectManager.clearAll();
     routeManager.clearAll();
     
@@ -117,14 +117,14 @@ ui.onLoadGame = async (file) => {
       tileData: gameState.tiles
     });
     
-    // Recreate editor with new tiles and map config
-    editor = new Editor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig(), routeManager);
+    // Recreate map editor with new tiles and map config
+    mapEditor = new MapEditor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig(), routeManager);
     
     // Reconnect UI callbacks
-    setupUICallbacks(ui, editor, routeManager);
+    setupUICallbacks(ui, mapEditor, routeManager);
     
     // Load objects
-    const newObjectManager = editor.getObjectManager();
+    const newObjectManager = mapEditor.getObjectManager();
     newObjectManager.setTilemap(tilemap); // Set tilemap reference for proper positioning
     newObjectManager.loadFromData(gameState.objects, gameState.nextObjectId);
     
@@ -149,15 +149,15 @@ const onMouseDown = (event) => {
   
   // Handle route creation
   if (isRouteMode) {
-    const result = editor.raycast(event);
+    const result = mapEditor.raycast(event);
     if (result && result.type === 'tile') {
       routeManager.addWaypoint(result.position);
     }
     return;
   }
   
-  // Try editor interaction first
-  const handled = editor.handleMouseDown(event);
+  // Try map editor interaction first
+  const handled = mapEditor.handleMouseDown(event);
   if (handled) {
     cameraController.handleMouseDown(event, false);
     return;
@@ -171,12 +171,12 @@ const onMouseDown = (event) => {
 };
 
 const onMouseMove = (event) => {
-  // Handle editor dragging
-  editor.handleMouseMove(event);
+  // Handle map editor dragging
+  mapEditor.handleMouseMove(event);
   
   // Update route preview if in route creation mode
   if (routeManager.isInRouteCreationMode()) {
-    const result = editor.raycast(event);
+    const result = mapEditor.raycast(event);
     if (result && result.type === 'tile') {
       routeManager.updatePreviewLine(result.position);
     } else {
@@ -189,7 +189,7 @@ const onMouseMove = (event) => {
 };
 
 const onMouseUp = (event) => {
-  editor.handleMouseUp(event);
+  mapEditor.handleMouseUp(event);
   cameraController.handleMouseUp();
 };
 
@@ -212,7 +212,7 @@ const onContextMenu = (event) => {
   
   // Show properties panel for objects or routes in edit mode
   if (currentMode === 'EDIT') {
-    const result = editor.handleRightClick(event);
+    const result = mapEditor.handleRightClick(event);
     if (result) {
       // Check if it's a route or object
       if (result.id !== undefined && result.waypoints !== undefined) {
@@ -249,16 +249,16 @@ const onKeyDown = (event) => {
     
     // Delete selected route in EDIT mode
     if (currentMode === 'EDIT') {
-      if (editor.deleteSelectedRoute()) {
+      if (mapEditor.deleteSelectedRoute()) {
         ui.hidePropertiesPanel();
         return;
       }
     }
     
     // Delete selected object
-    const selectedObject = editor.getSelectedObject();
+    const selectedObject = mapEditor.getSelectedObject();
     if (selectedObject) {
-      editor.deleteObject(selectedObject.id);
+      mapEditor.deleteObject(selectedObject.id);
       ui.hidePropertiesPanel();
     }
   }

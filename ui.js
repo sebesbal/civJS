@@ -1,6 +1,6 @@
 // UI Manager - coordinates different editor UIs
-import { MapEditorUI } from './map-editor-ui.js';
-import { EconomyEditorUI } from './economy-editor-ui.js';
+import { MapEditorUI } from './map-editor/map-editor-ui.js';
+import { EconomyEditorUI } from './economy-editor/economy-editor-ui.js';
 
 export class UIManager {
   constructor() {

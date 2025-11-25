@@ -1,0 +1,22 @@
+/* Economy Editor UI Styles */
+
+#economy-editor-ui {
+  position: fixed;
+  left: 60px;
+  top: 0;
+  width: 300px;
+  height: 100vh;
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(10px);
+  color: #ffffff;
+  padding: 20px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+  display: none;
+}
+
+#economy-editor-ui.visible {
+  display: block;
+}
+
