@@ -1,310 +1,195 @@
-// UI Manager for the strategic game editor
-import { ObjectTypes } from './objects.js';
+// UI Manager - coordinates different editor UIs
+import { MapEditorUI } from './map-editor-ui.js';
+import { EconomyEditorUI } from './economy-editor-ui.js';
 
 export class UIManager {
   constructor() {
-    this.sidebar = null;
-    this.propertiesPanel = null;
-    this.currentMode = 'VIEW';
-    this.selectedObjectType = null;
-    this.onModeChange = null;
-    this.onObjectTypeSelect = null;
-    this.onRouteModeToggle = null;
-    this.onObjectDelete = null;
-    this.onObjectPropertyChange = null;
-    this.onRouteDelete = null;
-    this.onSaveGame = null;
-    this.onLoadGame = null;
+    this.mainToolbar = null;
+    this.mapEditorUI = null;
+    this.economyEditorUI = null;
+    this.currentEditorMode = 'MAP_EDITOR'; // 'MAP_EDITOR' or 'ECONOMY_EDITOR'
+    this.onEditorModeChange = null;
     this.init();
   }
 
   init() {
-    this.createSidebar();
-    this.createPropertiesPanel();
+    this.createMainToolbar();
+    this.mapEditorUI = new MapEditorUI();
+    this.economyEditorUI = new EconomyEditorUI();
+    this.setEditorMode('MAP_EDITOR');
   }
 
-  createSidebar() {
-    this.sidebar = document.createElement('div');
-    this.sidebar.id = 'sidebar';
-    document.body.appendChild(this.sidebar);
+  createMainToolbar() {
+    this.mainToolbar = document.createElement('div');
+    this.mainToolbar.id = 'main-toolbar';
+    document.body.appendChild(this.mainToolbar);
 
-    // Mode toggle section
-    const modeSection = document.createElement('div');
-    modeSection.className = 'sidebar-section';
-    
-    const modeTitle = document.createElement('h3');
-    modeTitle.textContent = 'Mode';
-    modeSection.appendChild(modeTitle);
+    // Map Editor button
+    const mapEditorBtn = document.createElement('button');
+    mapEditorBtn.className = 'toolbar-item active';
+    mapEditorBtn.textContent = 'Map';
+    mapEditorBtn.dataset.editorMode = 'MAP_EDITOR';
+    mapEditorBtn.title = 'Map Editor';
+    mapEditorBtn.addEventListener('click', () => this.setEditorMode('MAP_EDITOR'));
+    this.mainToolbar.appendChild(mapEditorBtn);
 
-    const viewModeBtn = document.createElement('button');
-    viewModeBtn.className = 'mode-btn active';
-    viewModeBtn.textContent = 'View';
-    viewModeBtn.dataset.mode = 'VIEW';
-    viewModeBtn.addEventListener('click', () => this.setMode('VIEW'));
-    modeSection.appendChild(viewModeBtn);
-
-    const editModeBtn = document.createElement('button');
-    editModeBtn.className = 'mode-btn';
-    editModeBtn.textContent = 'Edit';
-    editModeBtn.dataset.mode = 'EDIT';
-    editModeBtn.addEventListener('click', () => this.setMode('EDIT'));
-    modeSection.appendChild(editModeBtn);
-
-    this.sidebar.appendChild(modeSection);
-
-    // Object types section
-    const objectsSection = document.createElement('div');
-    objectsSection.className = 'sidebar-section';
-    
-    const objectsTitle = document.createElement('h3');
-    objectsTitle.textContent = 'Place Objects';
-    objectsSection.appendChild(objectsTitle);
-
-    // Dynamically generate object types from ObjectTypes definition
-    const objectTypes = Object.keys(ObjectTypes).map(key => ({
-      key: key,
-      name: ObjectTypes[key].name
-    }));
-
-    objectTypes.forEach(type => {
-      const btn = document.createElement('button');
-      btn.className = 'object-type-btn';
-      btn.dataset.type = type.key;
-      
-      const colorPreview = document.createElement('span');
-      colorPreview.className = 'color-preview';
-      colorPreview.style.backgroundColor = this.getColorForType(type.key);
-      btn.appendChild(colorPreview);
-      
-      const label = document.createElement('span');
-      label.textContent = type.name;
-      btn.appendChild(label);
-      
-      btn.addEventListener('click', () => this.selectObjectType(type.key));
-      objectsSection.appendChild(btn);
-    });
-
-    this.sidebar.appendChild(objectsSection);
-
-    // Routes section
-    const routesSection = document.createElement('div');
-    routesSection.className = 'sidebar-section';
-    
-    const routesTitle = document.createElement('h3');
-    routesTitle.textContent = 'Routes';
-    routesSection.appendChild(routesTitle);
-
-    const routeModeBtn = document.createElement('button');
-    routeModeBtn.className = 'route-btn';
-    routeModeBtn.textContent = 'Create Route';
-    routeModeBtn.addEventListener('click', () => this.toggleRouteMode());
-    routesSection.appendChild(routeModeBtn);
-
-    this.sidebar.appendChild(routesSection);
-
-    // Save/Load section
-    const saveLoadSection = document.createElement('div');
-    saveLoadSection.className = 'sidebar-section';
-    
-    const saveLoadTitle = document.createElement('h3');
-    saveLoadTitle.textContent = 'Save/Load';
-    saveLoadSection.appendChild(saveLoadTitle);
-
-    const saveBtn = document.createElement('button');
-    saveBtn.className = 'save-btn';
-    saveBtn.textContent = 'Save Game';
-    saveBtn.addEventListener('click', () => {
-      if (this.onSaveGame) {
-        this.onSaveGame();
-      }
-    });
-    saveLoadSection.appendChild(saveBtn);
-
-    const loadBtn = document.createElement('button');
-    loadBtn.className = 'load-btn';
-    loadBtn.textContent = 'Load Game';
-    
-    // Create hidden file input
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.json';
-    fileInput.style.display = 'none';
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file && this.onLoadGame) {
-        this.onLoadGame(file);
-      }
-      // Reset input so same file can be selected again
-      fileInput.value = '';
-    });
-    document.body.appendChild(fileInput);
-    
-    loadBtn.addEventListener('click', () => {
-      fileInput.click();
-    });
-    saveLoadSection.appendChild(loadBtn);
-
-    this.sidebar.appendChild(saveLoadSection);
+    // Economy Editor button
+    const economyEditorBtn = document.createElement('button');
+    economyEditorBtn.className = 'toolbar-item';
+    economyEditorBtn.textContent = 'Econ';
+    economyEditorBtn.dataset.editorMode = 'ECONOMY_EDITOR';
+    economyEditorBtn.title = 'Economy Editor';
+    economyEditorBtn.addEventListener('click', () => this.setEditorMode('ECONOMY_EDITOR'));
+    this.mainToolbar.appendChild(economyEditorBtn);
   }
 
-  createPropertiesPanel() {
-    this.propertiesPanel = document.createElement('div');
-    this.propertiesPanel.id = 'properties-panel';
-    this.propertiesPanel.style.display = 'none';
-    document.body.appendChild(this.propertiesPanel);
-  }
+  setEditorMode(mode) {
+    this.currentEditorMode = mode;
 
-  setMode(mode) {
-    this.currentMode = mode;
-    
-    // Update button states
-    document.querySelectorAll('.mode-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.mode === mode);
+    // Update toolbar button states
+    document.querySelectorAll('.toolbar-item').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.editorMode === mode);
     });
 
-    // Clear object type selection when switching to view mode
-    if (mode === 'VIEW') {
-      this.selectObjectType(null);
+    // Show/hide UI elements based on editor mode
+    if (mode === 'MAP_EDITOR') {
+      this.mapEditorUI.show();
+      this.economyEditorUI.hide();
+    } else {
+      this.mapEditorUI.hide();
+      this.economyEditorUI.show();
     }
 
-    if (this.onModeChange) {
-      this.onModeChange(mode);
+    // Notify listeners
+    if (this.onEditorModeChange) {
+      this.onEditorModeChange(mode);
+    }
+  }
+
+  getCurrentEditorMode() {
+    return this.currentEditorMode;
+  }
+
+  // Delegate methods to map editor UI
+  setMode(mode) {
+    if (this.mapEditorUI) {
+      this.mapEditorUI.setMode(mode);
     }
   }
 
   selectObjectType(type) {
-    // Toggle selection
-    if (this.selectedObjectType === type) {
-      this.selectedObjectType = null;
-    } else {
-      this.selectedObjectType = type;
-    }
-
-    // Update button states
-    document.querySelectorAll('.object-type-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.type === this.selectedObjectType);
-    });
-
-    if (this.onObjectTypeSelect) {
-      this.onObjectTypeSelect(this.selectedObjectType);
+    if (this.mapEditorUI) {
+      this.mapEditorUI.selectObjectType(type);
     }
   }
 
   toggleRouteMode() {
-    const routeBtn = document.querySelector('.route-btn');
-    const isActive = routeBtn.classList.contains('active');
-    
-    if (isActive) {
-      routeBtn.classList.remove('active');
-      routeBtn.textContent = 'Create Route';
-      if (this.onRouteModeToggle) {
-        this.onRouteModeToggle(false);
-      }
-    } else {
-      routeBtn.classList.add('active');
-      routeBtn.textContent = 'Cancel Route';
-      if (this.onRouteModeToggle) {
-        this.onRouteModeToggle(true);
-      }
+    if (this.mapEditorUI) {
+      this.mapEditorUI.toggleRouteMode();
     }
   }
 
   showPropertiesPanel(objectData) {
-    if (!objectData) {
-      this.hidePropertiesPanel();
-      return;
+    if (this.mapEditorUI && this.currentEditorMode === 'MAP_EDITOR') {
+      this.mapEditorUI.showPropertiesPanel(objectData);
     }
-
-    this.propertiesPanel.innerHTML = '';
-    this.propertiesPanel.style.display = 'block';
-
-    const title = document.createElement('h3');
-    title.textContent = 'Object Properties';
-    this.propertiesPanel.appendChild(title);
-
-    const typeLabel = document.createElement('div');
-    typeLabel.className = 'property-row';
-    typeLabel.innerHTML = `<strong>Type:</strong> <span>${objectData.type}</span>`;
-    this.propertiesPanel.appendChild(typeLabel);
-
-    const idLabel = document.createElement('div');
-    idLabel.className = 'property-row';
-    idLabel.innerHTML = `<strong>ID:</strong> <span>${objectData.id}</span>`;
-    this.propertiesPanel.appendChild(idLabel);
-
-    const positionLabel = document.createElement('div');
-    positionLabel.className = 'property-row';
-    const pos = objectData.mesh.position;
-    positionLabel.innerHTML = `<strong>Position:</strong> <span>(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})</span>`;
-    this.propertiesPanel.appendChild(positionLabel);
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'delete-btn';
-    deleteBtn.textContent = 'Delete Object';
-    deleteBtn.addEventListener('click', () => {
-      if (this.onObjectDelete) {
-        this.onObjectDelete(objectData.id);
-      }
-      this.hidePropertiesPanel();
-    });
-    this.propertiesPanel.appendChild(deleteBtn);
   }
 
   showRoutePropertiesPanel(routeData) {
-    if (!routeData) {
-      this.hidePropertiesPanel();
-      return;
+    if (this.mapEditorUI && this.currentEditorMode === 'MAP_EDITOR') {
+      this.mapEditorUI.showRoutePropertiesPanel(routeData);
     }
-
-    this.propertiesPanel.innerHTML = '';
-    this.propertiesPanel.style.display = 'block';
-
-    const title = document.createElement('h3');
-    title.textContent = 'Route Properties';
-    this.propertiesPanel.appendChild(title);
-
-    const idLabel = document.createElement('div');
-    idLabel.className = 'property-row';
-    idLabel.innerHTML = `<strong>ID:</strong> <span>${routeData.id}</span>`;
-    this.propertiesPanel.appendChild(idLabel);
-
-    const waypointsLabel = document.createElement('div');
-    waypointsLabel.className = 'property-row';
-    waypointsLabel.innerHTML = `<strong>Waypoints:</strong> <span>${routeData.waypoints.length}</span>`;
-    this.propertiesPanel.appendChild(waypointsLabel);
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'delete-btn';
-    deleteBtn.textContent = 'Delete Route';
-    deleteBtn.addEventListener('click', () => {
-      if (this.onRouteDelete) {
-        this.onRouteDelete(routeData.id);
-      }
-      this.hidePropertiesPanel();
-    });
-    this.propertiesPanel.appendChild(deleteBtn);
   }
 
   hidePropertiesPanel() {
-    this.propertiesPanel.style.display = 'none';
-  }
-
-  getColorForType(type) {
-    // Dynamically get color from ObjectTypes definition
-    const typeDef = ObjectTypes[type];
-    if (!typeDef) {
-      return '#ffffff';
+    if (this.mapEditorUI) {
+      this.mapEditorUI.hidePropertiesPanel();
     }
-    // Convert THREE.js hex color (0xff6b6b) to CSS hex color (#ff6b6b)
-    return '#' + typeDef.color.toString(16).padStart(6, '0');
   }
 
   getCurrentMode() {
-    return this.currentMode;
+    return this.mapEditorUI ? this.mapEditorUI.getCurrentMode() : null;
   }
 
   getSelectedObjectType() {
-    return this.selectedObjectType;
+    return this.mapEditorUI ? this.mapEditorUI.getSelectedObjectType() : null;
+  }
+
+  // Callback properties - automatically forward to map editor UI
+  set onModeChange(callback) {
+    this._onModeChange = callback;
+    if (this.mapEditorUI) {
+      this.mapEditorUI.onModeChange = callback;
+    }
+  }
+
+  get onModeChange() {
+    return this._onModeChange;
+  }
+
+  set onObjectTypeSelect(callback) {
+    this._onObjectTypeSelect = callback;
+    if (this.mapEditorUI) {
+      this.mapEditorUI.onObjectTypeSelect = callback;
+    }
+  }
+
+  get onObjectTypeSelect() {
+    return this._onObjectTypeSelect;
+  }
+
+  set onRouteModeToggle(callback) {
+    this._onRouteModeToggle = callback;
+    if (this.mapEditorUI) {
+      this.mapEditorUI.onRouteModeToggle = callback;
+    }
+  }
+
+  get onRouteModeToggle() {
+    return this._onRouteModeToggle;
+  }
+
+  set onObjectDelete(callback) {
+    this._onObjectDelete = callback;
+    if (this.mapEditorUI) {
+      this.mapEditorUI.onObjectDelete = callback;
+    }
+  }
+
+  get onObjectDelete() {
+    return this._onObjectDelete;
+  }
+
+  set onRouteDelete(callback) {
+    this._onRouteDelete = callback;
+    if (this.mapEditorUI) {
+      this.mapEditorUI.onRouteDelete = callback;
+    }
+  }
+
+  get onRouteDelete() {
+    return this._onRouteDelete;
+  }
+
+  set onSaveGame(callback) {
+    this._onSaveGame = callback;
+    if (this.mapEditorUI) {
+      this.mapEditorUI.onSaveGame = callback;
+    }
+  }
+
+  get onSaveGame() {
+    return this._onSaveGame;
+  }
+
+  set onLoadGame(callback) {
+    this._onLoadGame = callback;
+    if (this.mapEditorUI) {
+      this.mapEditorUI.onLoadGame = callback;
+    }
+  }
+
+  get onLoadGame() {
+    return this._onLoadGame;
   }
 }
-

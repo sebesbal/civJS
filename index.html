@@ -15,10 +15,61 @@
         overflow: hidden;
       }
 
+      /* Main Toolbar */
+      #main-toolbar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 60px;
+        height: 100vh;
+        background: rgba(20, 20, 20, 0.95);
+        backdrop-filter: blur(10px);
+        color: #ffffff;
+        padding: 10px 0;
+        z-index: 2000;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .toolbar-item {
+        width: 44px;
+        height: 44px;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        color: #ffffff;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 4px;
+        word-wrap: break-word;
+        overflow: hidden;
+      }
+
+      .toolbar-item:hover {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.3);
+        transform: translateY(-2px);
+      }
+
+      .toolbar-item.active {
+        background: #4a9eff;
+        border-color: #4a9eff;
+        box-shadow: 0 2px 8px rgba(74, 158, 255, 0.4);
+      }
+
       /* Sidebar */
       #sidebar {
         position: fixed;
-        left: 0;
+        left: 60px;
         top: 0;
         width: 250px;
         height: 100vh;
@@ -29,6 +80,13 @@
         overflow-y: auto;
         z-index: 1000;
         box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+      }
+
+      #sidebar.hidden {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
       }
 
       .sidebar-section {
@@ -168,6 +226,32 @@
         z-index: 1000;
         box-shadow: -2px 0 10px rgba(0, 0, 0, 0.3);
         overflow-y: auto;
+        transition: opacity 0.3s ease, visibility 0.3s ease;
+      }
+
+      #properties-panel.hidden {
+        display: none;
+      }
+
+      /* Economy Editor UI */
+      #economy-editor-ui {
+        position: fixed;
+        left: 60px;
+        top: 0;
+        width: 300px;
+        height: 100vh;
+        background: rgba(30, 30, 30, 0.95);
+        backdrop-filter: blur(10px);
+        color: #ffffff;
+        padding: 20px;
+        overflow-y: auto;
+        z-index: 1000;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+        display: none;
+      }
+
+      #economy-editor-ui.visible {
+        display: block;
       }
 
       #properties-panel h3 {
