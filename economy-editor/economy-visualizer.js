@@ -67,7 +67,15 @@ export class EconomyVisualizer {
       loader.load(
         imagePath,
         (texture) => {
-          texture.flipY = false; // SVG and some images need this
+          // Fix orientation - SVG typically needs flipY = true for correct orientation
+          texture.flipY = true;
+          // Improve texture quality - use best filtering
+          const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
+          texture.anisotropy = maxAnisotropy > 0 ? maxAnisotropy : 16;
+          texture.minFilter = THREE.LinearMipmapLinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+          texture.generateMipmaps = true;
+          texture.needsUpdate = true;
           this.imageTextures.set(imagePath, texture);
           resolve(texture);
         },
@@ -80,25 +88,45 @@ export class EconomyVisualizer {
     });
   }
 
-  // Create text texture
-  createTextTexture(text, fontSize = 24, width = 512, height = 128) {
+  // Create text texture with high quality
+  createTextTexture(text, fontSize = 48, width = 1024, height = 256) {
     const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
+    // High resolution for crisp text
+    const scale = 4; // Very high resolution
+    canvas.width = width * scale;
+    canvas.height = height * scale;
     const context = canvas.getContext('2d');
 
-    // Clear canvas
+    // Scale context for high DPI
+    context.scale(scale, scale);
+
+    // Clear canvas with transparent background
     context.clearRect(0, 0, width, height);
 
-    // Draw text
-    context.fillStyle = '#ffffff';
+    // Draw text with strong shadow for better readability
+    context.shadowColor = 'rgba(0, 0, 0, 1)';
+    context.shadowBlur = 8;
+    context.shadowOffsetX = 3;
+    context.shadowOffsetY = 3;
+    
+    // Draw text outline first for better visibility
+    context.strokeStyle = '#000000';
+    context.lineWidth = 4;
     context.font = `bold ${fontSize}px Arial`;
     context.textAlign = 'center';
     context.textBaseline = 'middle';
+    context.strokeText(text, width / 2, height / 2);
+    
+    // Then fill text
+    context.fillStyle = '#ffffff';
     context.fillText(text, width / 2, height / 2);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
+    // Best quality filtering
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
     return texture;
   }
 
@@ -140,64 +168,56 @@ export class EconomyVisualizer {
   async createNodeMesh(node) {
     const isSelected = node.id === this.selectedNodeId;
     
-    // Create rounded rectangle shape
-    const shape = this.createRoundedRectShape(this.nodeWidth, this.nodeHeight, this.borderRadius);
-    const geometry = new THREE.ExtrudeGeometry(shape, {
-      depth: this.nodeDepth,
-      bevelEnabled: true,
-      bevelThickness: 0.02,
-      bevelSize: 0.02,
-      bevelSegments: 3
-    });
-
-    // Create material with image texture if available
-    let material;
-    const imageTexture = await this.loadImageTexture(node.imagePath);
+    // Create a group to hold the node components
+    const nodeGroup = new THREE.Group();
+    nodeGroup.position.set(node.position.x, node.position.y, 0);
+    nodeGroup.userData.nodeId = node.id;
     
+    // Create background rounded rectangle (using a plane with rounded corners via shader or simple plane)
+    const bgGeometry = new THREE.PlaneGeometry(this.nodeWidth, this.nodeHeight);
+    const bgMaterial = new THREE.MeshStandardMaterial({
+      color: isSelected ? this.selectedNodeColor : this.nodeColor,
+      emissive: isSelected ? this.selectedNodeColor : 0x000000,
+      emissiveIntensity: isSelected ? 0.3 : 0
+    });
+    const bgMesh = new THREE.Mesh(bgGeometry, bgMaterial);
+    bgMesh.position.z = -0.01; // Slightly behind the icon
+    nodeGroup.add(bgMesh);
+
+    // Create icon plane (centered)
+    const imageTexture = await this.loadImageTexture(node.imagePath);
     if (imageTexture) {
-      // Create materials array for front (with image) and other faces
-      const frontMaterial = new THREE.MeshStandardMaterial({
+      // Create a plane for the icon, slightly smaller than the node
+      const iconSize = Math.min(this.nodeWidth * 0.8, this.nodeHeight * 0.8);
+      const iconGeometry = new THREE.PlaneGeometry(iconSize, iconSize);
+      const iconMaterial = new THREE.MeshBasicMaterial({
         map: imageTexture,
-        color: isSelected ? this.selectedNodeColor : 0xffffff,
-        emissive: isSelected ? this.selectedNodeColor : 0x000000,
-        emissiveIntensity: isSelected ? 0.2 : 0
+        transparent: true,
+        color: isSelected ? this.selectedNodeColor : 0xffffff
       });
-      
-      const sideMaterial = new THREE.MeshStandardMaterial({
-        color: isSelected ? this.selectedNodeColor : this.nodeColor,
-        emissive: isSelected ? this.selectedNodeColor : 0x000000,
-        emissiveIntensity: isSelected ? 0.3 : 0
-      });
-      
-      // ExtrudeGeometry uses materials array: [front, back, sides]
-      material = [frontMaterial, sideMaterial, sideMaterial];
-    } else {
-      // No image, use solid color
-      material = new THREE.MeshStandardMaterial({
-        color: isSelected ? this.selectedNodeColor : this.nodeColor,
-        emissive: isSelected ? this.selectedNodeColor : 0x000000,
-        emissiveIntensity: isSelected ? 0.3 : 0
-      });
+      const iconMesh = new THREE.Mesh(iconGeometry, iconMaterial);
+      iconMesh.position.z = 0.01; // Slightly in front
+      nodeGroup.add(iconMesh);
     }
 
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.set(node.position.x, node.position.y, 0); // 2D plane at z=0
-    mesh.userData.nodeId = node.id;
-    mesh.userData.imagePath = node.imagePath; // Store for material updates
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-
-    // Add text label below the node
-    const textTexture = this.createTextTexture(node.name, 20);
-    const textMaterial = new THREE.SpriteMaterial({ map: textTexture, transparent: true });
+    // Add text label below the node - make it much larger
+    const textTexture = this.createTextTexture(node.name, 48, 1024, 256);
+    const textMaterial = new THREE.SpriteMaterial({ 
+      map: textTexture, 
+      transparent: true,
+      depthTest: false,
+      depthWrite: false
+    });
     const textSprite = new THREE.Sprite(textMaterial);
-    textSprite.scale.set(this.nodeWidth * 1.2, 0.3, 1);
-    textSprite.position.set(node.position.x, node.position.y - this.nodeHeight / 2 - 0.3, 0.1);
+    // Make text much larger for readability
+    const textHeight = 0.8;
+    textSprite.scale.set(this.nodeWidth * 2, textHeight, 1);
+    textSprite.position.set(0, -this.nodeHeight / 2 - textHeight / 2 - 0.3, 0.1);
     textSprite.userData.nodeId = node.id;
-    this.scene.add(textSprite);
+    nodeGroup.add(textSprite);
 
-    this.scene.add(mesh);
-    this.nodeMeshes.set(node.id, { mesh, textSprite });
+    this.scene.add(nodeGroup);
+    this.nodeMeshes.set(node.id, { mesh: nodeGroup, textSprite, bgMesh });
   }
 
   // Create a spline connection between two nodes (2D)
@@ -258,40 +278,22 @@ export class EconomyVisualizer {
   }
 
   // Update node material for selection state
-  async updateNodeMaterial(mesh, nodeId, isSelected) {
+  async updateNodeMaterial(nodeGroup, nodeId, isSelected) {
     const node = this.economyManager.getNode(nodeId);
     if (!node) return;
 
-    // Dispose old materials
-    if (Array.isArray(mesh.material)) {
-      mesh.material.forEach(m => m.dispose());
-    } else {
-      mesh.material.dispose();
+    // Update background material
+    const bgMesh = nodeGroup.children.find(child => child.material && child.material.type === 'MeshStandardMaterial');
+    if (bgMesh) {
+      bgMesh.material.color.setHex(isSelected ? this.selectedNodeColor : this.nodeColor);
+      bgMesh.material.emissive.setHex(isSelected ? this.selectedNodeColor : 0x000000);
+      bgMesh.material.emissiveIntensity = isSelected ? 0.3 : 0;
     }
 
-    const imageTexture = await this.loadImageTexture(node.imagePath);
-    
-    if (imageTexture) {
-      const frontMaterial = new THREE.MeshStandardMaterial({
-        map: imageTexture,
-        color: isSelected ? this.selectedNodeColor : 0xffffff,
-        emissive: isSelected ? this.selectedNodeColor : 0x000000,
-        emissiveIntensity: isSelected ? 0.2 : 0
-      });
-      
-      const sideMaterial = new THREE.MeshStandardMaterial({
-        color: isSelected ? this.selectedNodeColor : this.nodeColor,
-        emissive: isSelected ? this.selectedNodeColor : 0x000000,
-        emissiveIntensity: isSelected ? 0.3 : 0
-      });
-      
-      mesh.material = [frontMaterial, sideMaterial, sideMaterial];
-    } else {
-      mesh.material = new THREE.MeshStandardMaterial({
-        color: isSelected ? this.selectedNodeColor : this.nodeColor,
-        emissive: isSelected ? this.selectedNodeColor : 0x000000,
-        emissiveIntensity: isSelected ? 0.3 : 0
-      });
+    // Update icon material if it exists
+    const iconMesh = nodeGroup.children.find(child => child.material && child.material.type === 'MeshBasicMaterial' && child.material.map);
+    if (iconMesh) {
+      iconMesh.material.color.setHex(isSelected ? this.selectedNodeColor : 0xffffff);
     }
   }
 
@@ -299,16 +301,22 @@ export class EconomyVisualizer {
   clear() {
     // Remove node meshes
     for (const nodeData of this.nodeMeshes.values()) {
+      // Dispose all children in the group
+      nodeData.mesh.traverse((child) => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(m => {
+              if (m.map) m.map.dispose();
+              m.dispose();
+            });
+          } else {
+            if (child.material.map) child.material.map.dispose();
+            child.material.dispose();
+          }
+        }
+      });
       this.scene.remove(nodeData.mesh);
-      this.scene.remove(nodeData.textSprite);
-      nodeData.mesh.geometry.dispose();
-      if (Array.isArray(nodeData.mesh.material)) {
-        nodeData.mesh.material.forEach(m => m.dispose());
-      } else {
-        nodeData.mesh.material.dispose();
-      }
-      nodeData.textSprite.material.map.dispose();
-      nodeData.textSprite.material.dispose();
     }
     this.nodeMeshes.clear();
 
@@ -323,7 +331,7 @@ export class EconomyVisualizer {
     this.selectedNodeId = null;
   }
 
-  // Update camera to view entire DAG (2D view)
+  // Update camera to view entire DAG (2D view - straight down)
   updateCamera() {
     if (!this.economyManager || this.economyManager.getAllNodes().length === 0) {
       return;
@@ -337,10 +345,27 @@ export class EconomyVisualizer {
     const height = bbox.maxY - bbox.minY;
     const maxDim = Math.max(width, height);
 
-    // Position camera to view 2D plane from above with slight angle
-    const distance = maxDim * 1.5;
-    this.camera.position.set(centerX, centerY + distance * 0.3, distance);
-    this.camera.lookAt(centerX, centerY, 0);
+    // For orthographic camera, adjust the view size instead of position
+    if (this.camera.isOrthographicCamera) {
+      const padding = 2; // Add padding around the DAG
+      const viewSize = Math.max(maxDim / 2 + padding, 5); // Minimum view size
+      const aspect = this.renderer.domElement.width / this.renderer.domElement.height || 1;
+      
+      this.camera.left = -viewSize * aspect;
+      this.camera.right = viewSize * aspect;
+      this.camera.top = viewSize;
+      this.camera.bottom = -viewSize;
+      
+      // Center the camera
+      this.camera.position.set(centerX, centerY, 10);
+      this.camera.lookAt(centerX, centerY, 0);
+    } else {
+      // Fallback for perspective camera
+      const distance = maxDim * 1.2;
+      this.camera.position.set(centerX, centerY, distance);
+      this.camera.lookAt(centerX, centerY, 0);
+    }
+    
     this.camera.updateProjectionMatrix();
   }
 
@@ -356,14 +381,29 @@ export class EconomyVisualizer {
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(mouse, this.camera);
 
-    const meshes = Array.from(this.nodeMeshes.values()).map(nd => nd.mesh);
-    if (meshes.length === 0) return null;
+    // Get all meshes from node groups (including children)
+    const allMeshes = [];
+    for (const nodeData of this.nodeMeshes.values()) {
+      nodeData.mesh.traverse((child) => {
+        if (child.isMesh) {
+          allMeshes.push(child);
+        }
+      });
+    }
     
-    const intersects = raycaster.intersectObjects(meshes);
+    if (allMeshes.length === 0) return null;
+    
+    const intersects = raycaster.intersectObjects(allMeshes, true);
 
     if (intersects.length > 0) {
-      const nodeId = intersects[0].object.userData.nodeId;
-      return this.economyManager.getNode(nodeId);
+      // Find the parent group
+      let obj = intersects[0].object;
+      while (obj && !obj.userData.nodeId) {
+        obj = obj.parent;
+      }
+      if (obj && obj.userData.nodeId) {
+        return this.economyManager.getNode(obj.userData.nodeId);
+      }
     }
 
     return null;

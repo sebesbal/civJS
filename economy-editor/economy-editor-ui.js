@@ -147,14 +147,27 @@ export class EconomyEditorUI {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x1a1a1a);
 
-    // Create camera (optimized for 2D view)
-    this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
-    this.camera.position.set(0, 5, 15);
+    // Create camera (orthographic for true 2D view)
+    const aspect = 1; // Will be updated on resize
+    const viewSize = 20;
+    this.camera = new THREE.OrthographicCamera(
+      -viewSize * aspect, viewSize * aspect,
+      viewSize, -viewSize,
+      0.1, 1000
+    );
+    this.camera.position.set(0, 0, 10);
     this.camera.lookAt(0, 0, 0);
 
-    // Create renderer
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    // Create renderer with high quality settings
+    this.renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      powerPreference: "high-performance",
+      precision: "highp"
+    });
+    this.renderer.setPixelRatio(window.devicePixelRatio || 1); // Use device pixel ratio for crisp rendering
     this.renderer.setSize(800, 600);
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.canvasContainer.appendChild(this.renderer.domElement);
 
     // Lighting
@@ -189,13 +202,21 @@ export class EconomyEditorUI {
   }
 
   handleResize() {
-    if (!this.renderer || !this.canvasContainer) return;
+    if (!this.renderer || !this.canvasContainer || !this.camera) return;
     
     const width = this.canvasContainer.clientWidth;
     const height = this.canvasContainer.clientHeight;
     
-    this.camera.aspect = width / height;
+    // Update orthographic camera bounds
+    const aspect = width / height;
+    const viewSize = 20;
+    this.camera.left = -viewSize * aspect;
+    this.camera.right = viewSize * aspect;
+    this.camera.top = viewSize;
+    this.camera.bottom = -viewSize;
     this.camera.updateProjectionMatrix();
+    // Use device pixel ratio for crisp rendering
+    this.renderer.setPixelRatio(window.devicePixelRatio || 1);
     this.renderer.setSize(width, height);
   }
 
