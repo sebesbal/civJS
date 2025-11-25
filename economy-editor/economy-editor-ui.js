@@ -270,6 +270,9 @@ export class EconomyEditorUI {
         this.camera.position.x = this.cameraStartPosition.x - worldDeltaX;
         this.camera.position.y = this.cameraStartPosition.y - worldDeltaY;
         this.camera.lookAt(this.camera.position.x, this.camera.position.y, 0);
+        
+        // Constrain camera to graph bounds
+        this.constrainCameraToGraphBounds();
       }
     });
 
@@ -310,6 +313,8 @@ export class EconomyEditorUI {
         if (this.visualizer) {
           this.visualizer.updateCameraViewSize(this.currentZoom);
         }
+        // Constrain camera to graph bounds after zoom
+        this.constrainCameraToGraphBounds();
       }
     });
   }
@@ -372,6 +377,111 @@ export class EconomyEditorUI {
     this.calculatedMaxZoom = viewSize;
   }
 
+  // Constrain camera so that the viewport (r1) always stays within graph bounds (r2)
+  constrainCameraToGraphBounds() {
+    if (!this.economyManager || !this.visualizer || !this.camera || !this.renderer) {
+      return;
+    }
+    
+    const nodes = this.economyManager.getAllNodes();
+    if (nodes.length === 0) {
+      return;
+    }
+    
+    // Get graph bounding box (r2)
+    const layout = this.visualizer.layout;
+    if (!layout) {
+      return;
+    }
+    
+    const graphBbox = layout.getBoundingBox(this.economyManager);
+    
+    // Get viewport dimensions (r1)
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const aspect = rect.width / rect.height || 1;
+    const viewSize = this.currentZoom;
+    
+    // Calculate viewport bounds in world coordinates
+    const viewportHalfWidth = viewSize * aspect;
+    const viewportHalfHeight = viewSize;
+    
+    // Current viewport bounds (r1)
+    const viewportLeft = this.camera.position.x - viewportHalfWidth;
+    const viewportRight = this.camera.position.x + viewportHalfWidth;
+    const viewportBottom = this.camera.position.y - viewportHalfHeight;
+    const viewportTop = this.camera.position.y + viewportHalfHeight;
+    
+    // Graph bounds (r2) - add padding for node sizes
+    const nodePadding = 1.5; // Account for node width/height
+    const graphLeft = graphBbox.minX - nodePadding;
+    const graphRight = graphBbox.maxX + nodePadding;
+    const graphBottom = graphBbox.minY - nodePadding;
+    const graphTop = graphBbox.maxY + nodePadding;
+    
+    // Clamp camera position so viewport stays within graph bounds
+    let newCameraX = this.camera.position.x;
+    let newCameraY = this.camera.position.y;
+    
+    // Constrain horizontally
+    if (viewportRight > graphRight) {
+      newCameraX = graphRight - viewportHalfWidth;
+    }
+    if (viewportLeft < graphLeft) {
+      newCameraX = graphLeft + viewportHalfWidth;
+    }
+    
+    // Constrain vertically
+    if (viewportTop > graphTop) {
+      newCameraY = graphTop - viewportHalfHeight;
+    }
+    if (viewportBottom < graphBottom) {
+      newCameraY = graphBottom + viewportHalfHeight;
+    }
+    
+    // If viewport is larger than graph, center it
+    const viewportWidth = viewportRight - viewportLeft;
+    const viewportHeight = viewportTop - viewportBottom;
+    const graphWidth = graphRight - graphLeft;
+    const graphHeight = graphTop - graphBottom;
+    
+    if (viewportWidth > graphWidth) {
+      newCameraX = (graphLeft + graphRight) / 2;
+    }
+    if (viewportHeight > graphHeight) {
+      newCameraY = (graphBottom + graphTop) / 2;
+    }
+    
+    // Update camera position if it changed
+    if (newCameraX !== this.camera.position.x || newCameraY !== this.camera.position.y) {
+      this.camera.position.x = newCameraX;
+      this.camera.position.y = newCameraY;
+      this.camera.lookAt(newCameraX, newCameraY, 0);
+    }
+    
+    // Also constrain zoom - ensure zoom doesn't allow viewport to exceed graph bounds
+    // Calculate maximum allowed zoom (view size) to fit graph
+    // Viewport width = 2 * viewSize * aspect, must be <= graphWidth
+    // Viewport height = 2 * viewSize, must be <= graphHeight
+    // So: viewSize <= graphWidth / (2 * aspect) AND viewSize <= graphHeight / 2
+    // Maximum allowed viewSize is the minimum of these two
+    const maxZoomForGraph = Math.min(
+      graphWidth / (2 * aspect),
+      graphHeight / 2
+    );
+    
+    // If current zoom is too large (viewport too large), reduce it
+    if (this.currentZoom > maxZoomForGraph) {
+      this.currentZoom = maxZoomForGraph;
+      // Update calculatedMaxZoom to reflect this constraint
+      if (this.calculatedMaxZoom === null || this.currentZoom > this.calculatedMaxZoom) {
+        this.calculatedMaxZoom = this.currentZoom;
+      }
+      this.visualizer.updateCameraViewSize(this.currentZoom);
+      // Recalculate camera position after zoom change
+      this.constrainCameraToGraphBounds();
+    }
+  }
+
   fitGraphToScreen() {
     if (this.calculatedMaxZoom === null) {
       this.calculateMaxZoom();
@@ -400,6 +510,9 @@ export class EconomyEditorUI {
     const centerY = (bbox.minY + bbox.maxY) / 2;
     this.camera.position.set(centerX, centerY, 10);
     this.camera.lookAt(centerX, centerY, 0);
+    
+    // Apply constraints
+    this.constrainCameraToGraphBounds();
   }
 
   handleResize() {
@@ -419,6 +532,9 @@ export class EconomyEditorUI {
     // Use device pixel ratio for crisp rendering
     this.renderer.setPixelRatio(window.devicePixelRatio || 1);
     this.renderer.setSize(width, height);
+    
+    // Constrain camera to graph bounds after resize
+    this.constrainCameraToGraphBounds();
   }
 
   handleCanvasClick(event) {
@@ -701,6 +817,8 @@ export class EconomyEditorUI {
       // Recalculate max zoom after visualization updates
       this.calculatedMaxZoom = null;
       this.calculateMaxZoom();
+      // Apply constraints after visualization update
+      this.constrainCameraToGraphBounds();
     }
   }
 
