@@ -4,19 +4,311 @@
   position: fixed;
   left: 60px;
   top: 0;
-  width: 300px;
+  width: calc(100% - 60px);
   height: 100vh;
   background: rgba(30, 30, 30, 0.95);
   backdrop-filter: blur(10px);
   color: #ffffff;
-  padding: 20px;
-  overflow-y: auto;
   z-index: 1000;
   box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
   display: none;
+  overflow: hidden;
 }
 
 #economy-editor-ui.visible {
   display: block;
 }
 
+.economy-title {
+  margin: 0;
+  padding: 20px;
+  font-size: 18px;
+  font-weight: 600;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.economy-content {
+  display: flex;
+  height: calc(100vh - 70px);
+}
+
+.economy-sidebar {
+  width: 300px;
+  padding: 20px;
+  overflow-y: auto;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.economy-section {
+  margin-bottom: 30px;
+}
+
+.economy-section h4 {
+  margin: 0 0 15px 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #aaaaaa;
+}
+
+.economy-node-list {
+  margin-bottom: 15px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.economy-node-item {
+  padding: 10px;
+  margin-bottom: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.economy-node-item:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.economy-node-item.selected {
+  background: rgba(74, 158, 255, 0.3);
+  border-color: #4a9eff;
+}
+
+.economy-btn {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.economy-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.economy-btn-primary {
+  background: #4a9eff;
+  border-color: #4a9eff;
+}
+
+.economy-btn-primary:hover {
+  background: #5aaeff;
+  border-color: #5aaeff;
+}
+
+.economy-btn-danger {
+  background: rgba(255, 77, 77, 0.2);
+  border-color: rgba(255, 77, 77, 0.5);
+  color: #ff6b6b;
+}
+
+.economy-btn-danger:hover {
+  background: rgba(255, 77, 77, 0.3);
+  border-color: #ff6b6b;
+}
+
+.economy-btn-small {
+  padding: 5px 10px;
+  font-size: 12px;
+  width: auto;
+}
+
+.economy-btn-remove {
+  padding: 2px 8px;
+  background: rgba(255, 77, 77, 0.2);
+  border: 1px solid rgba(255, 77, 77, 0.5);
+  border-radius: 4px;
+  color: #ff6b6b;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.economy-btn-remove:hover {
+  background: rgba(255, 77, 77, 0.3);
+}
+
+.economy-canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.economy-canvas-container canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.economy-properties-panel {
+  width: 300px;
+  padding: 20px;
+  background: rgba(20, 20, 20, 0.95);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  overflow-y: auto;
+}
+
+.economy-properties-panel h4 {
+  margin: 0 0 20px 0;
+  font-size: 16px;
+  font-weight: 600;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+  padding-bottom: 10px;
+}
+
+.economy-property-row {
+  margin-bottom: 15px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.economy-property-row strong {
+  color: #aaaaaa;
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.economy-property-row span {
+  color: #ffffff;
+  display: block;
+}
+
+/* Dialog styles */
+.economy-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.economy-dialog-content {
+  background: rgba(30, 30, 30, 0.95);
+  padding: 30px;
+  border-radius: 8px;
+  width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.economy-dialog-content h4 {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.economy-dialog-content label {
+  display: block;
+  margin: 15px 0 5px 0;
+  font-size: 14px;
+  color: #aaaaaa;
+}
+
+.economy-input {
+  width: 100%;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.economy-input:focus {
+  outline: none;
+  border-color: #4a9eff;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.economy-input-small {
+  width: 80px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.economy-select {
+  flex: 1;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 14px;
+  margin-right: 10px;
+}
+
+.economy-select:focus {
+  outline: none;
+  border-color: #4a9eff;
+}
+
+.economy-inputs-container {
+  margin: 10px 0;
+}
+
+.economy-input-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+  gap: 10px;
+}
+
+.economy-dialog-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.economy-dialog-buttons .economy-btn {
+  flex: 1;
+  margin: 0;
+}
+
+/* Scrollbar styling */
+.economy-sidebar::-webkit-scrollbar,
+.economy-properties-panel::-webkit-scrollbar,
+.economy-node-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.economy-sidebar::-webkit-scrollbar-track,
+.economy-properties-panel::-webkit-scrollbar-track,
+.economy-node-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.economy-sidebar::-webkit-scrollbar-thumb,
+.economy-properties-panel::-webkit-scrollbar-thumb,
+.economy-node-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.economy-sidebar::-webkit-scrollbar-thumb:hover,
+.economy-properties-panel::-webkit-scrollbar-thumb:hover,
+.economy-node-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}

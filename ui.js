@@ -9,6 +9,7 @@ export class UIManager {
     this.economyEditorUI = null;
     this.currentEditorMode = 'MAP_EDITOR'; // 'MAP_EDITOR' or 'ECONOMY_EDITOR'
     this.onEditorModeChange = null;
+    this.renderer = null;
     this.init();
   }
 
@@ -16,7 +17,12 @@ export class UIManager {
     this.createMainToolbar();
     this.mapEditorUI = new MapEditorUI();
     this.economyEditorUI = new EconomyEditorUI();
+    this.setupEconomyEditorCallbacks();
     this.setEditorMode('MAP_EDITOR');
+  }
+
+  setupEconomyEditorCallbacks() {
+    // Callbacks will be set via property setters
   }
 
   createMainToolbar() {
@@ -55,15 +61,27 @@ export class UIManager {
     if (mode === 'MAP_EDITOR') {
       this.mapEditorUI.show();
       this.economyEditorUI.hide();
+      // Show the map renderer
+      if (this.renderer) {
+        this.renderer.domElement.style.display = 'block';
+      }
     } else {
       this.mapEditorUI.hide();
       this.economyEditorUI.show();
+      // Hide the map renderer
+      if (this.renderer) {
+        this.renderer.domElement.style.display = 'none';
+      }
     }
 
     // Notify listeners
     if (this.onEditorModeChange) {
       this.onEditorModeChange(mode);
     }
+  }
+
+  setRenderer(renderer) {
+    this.renderer = renderer;
   }
 
   getCurrentEditorMode() {
@@ -191,5 +209,28 @@ export class UIManager {
 
   get onLoadGame() {
     return this._onLoadGame;
+  }
+
+  // Economy editor callbacks
+  set onSaveEconomy(callback) {
+    this._onSaveEconomy = callback;
+    if (this.economyEditorUI) {
+      this.economyEditorUI.onSaveEconomy = callback;
+    }
+  }
+
+  get onSaveEconomy() {
+    return this._onSaveEconomy;
+  }
+
+  set onLoadEconomy(callback) {
+    this._onLoadEconomy = callback;
+    if (this.economyEditorUI) {
+      this.economyEditorUI.onLoadEconomy = callback;
+    }
+  }
+
+  get onLoadEconomy() {
+    return this._onLoadEconomy;
   }
 }

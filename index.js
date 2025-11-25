@@ -38,6 +38,7 @@ let mapEditor = new MapEditor(scene, camera, renderer, tilemap.tiles, tilemap.ge
 // Set tilemap reference in object manager for proper object positioning
 mapEditor.getObjectManager().setTilemap(tilemap);
 const ui = new UIManager();
+ui.setRenderer(renderer); // Set renderer reference so UI can hide/show it
 const saveLoadManager = new SaveLoadManager();
 
 // Helper function to setup UI callbacks
@@ -75,6 +76,19 @@ function setupUICallbacks(ui, mapEditor, routeManager) {
 
 // Connect UI callbacks
 setupUICallbacks(ui, mapEditor, routeManager);
+
+// Economy Editor Save/Load callbacks
+ui.onSaveEconomy = () => {
+  if (ui.economyEditorUI) {
+    ui.economyEditorUI.saveEconomy();
+  }
+};
+
+ui.onLoadEconomy = async (file) => {
+  if (ui.economyEditorUI) {
+    await ui.economyEditorUI.loadEconomy(file);
+  }
+};
 
 // Save/Load callbacks
 ui.onSaveGame = () => {
