@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { EconomyManager } from './economy-manager.js';
 import { EconomyVisualizer } from './economy-visualizer.js';
 import { EconomySaveLoadManager } from './economy-save-load.js';
+import { RandomEconomyGenerator } from './random-economy-generator.js';
 
 export class EconomyEditorUI {
   constructor() {
@@ -13,6 +14,7 @@ export class EconomyEditorUI {
     
     this.economyManager = new EconomyManager();
     this.saveLoadManager = new EconomySaveLoadManager();
+    this.randomGenerator = new RandomEconomyGenerator();
     this.visualizer = null;
     
     // Three.js setup
@@ -89,6 +91,13 @@ export class EconomyEditorUI {
     createBtn.textContent = '+ Create Product';
     createBtn.addEventListener('click', () => this.showCreateNodeDialog());
     nodeListSection.appendChild(createBtn);
+
+    // Generate random economy button
+    const generateBtn = document.createElement('button');
+    generateBtn.className = 'economy-btn';
+    generateBtn.textContent = '🎲 Generate Random Economy';
+    generateBtn.addEventListener('click', () => this.showGenerateRandomDialog());
+    nodeListSection.appendChild(generateBtn);
 
     this.sidebar.appendChild(nodeListSection);
 
@@ -509,5 +518,141 @@ export class EconomyEditorUI {
 
   hide() {
     this.container.classList.remove('visible');
+  }
+
+  showGenerateRandomDialog() {
+    // Create dialog
+    const dialog = document.createElement('div');
+    dialog.className = 'economy-dialog';
+    
+    const dialogContent = document.createElement('div');
+    dialogContent.className = 'economy-dialog-content';
+    
+    const title = document.createElement('h4');
+    title.textContent = 'Generate Random Economy';
+    dialogContent.appendChild(title);
+
+    // Number of nodes input
+    const nodesLabel = document.createElement('label');
+    nodesLabel.textContent = 'Number of Nodes:';
+    dialogContent.appendChild(nodesLabel);
+    
+    const nodesInput = document.createElement('input');
+    nodesInput.type = 'number';
+    nodesInput.className = 'economy-input';
+    nodesInput.value = '20';
+    nodesInput.min = '1';
+    nodesInput.max = '100';
+    dialogContent.appendChild(nodesInput);
+
+    // Max depth input
+    const depthLabel = document.createElement('label');
+    depthLabel.textContent = 'Max Depth (longest chain):';
+    dialogContent.appendChild(depthLabel);
+    
+    const depthInput = document.createElement('input');
+    depthInput.type = 'number';
+    depthInput.className = 'economy-input';
+    depthInput.value = '4';
+    depthInput.min = '1';
+    depthInput.max = '10';
+    dialogContent.appendChild(depthInput);
+
+    // Min inputs
+    const minInputsLabel = document.createElement('label');
+    minInputsLabel.textContent = 'Min Input Products:';
+    dialogContent.appendChild(minInputsLabel);
+    
+    const minInputsInput = document.createElement('input');
+    minInputsInput.type = 'number';
+    minInputsInput.className = 'economy-input';
+    minInputsInput.value = '1';
+    minInputsInput.min = '0';
+    minInputsInput.max = '10';
+    dialogContent.appendChild(minInputsInput);
+
+    // Max inputs
+    const maxInputsLabel = document.createElement('label');
+    maxInputsLabel.textContent = 'Max Input Products:';
+    dialogContent.appendChild(maxInputsLabel);
+    
+    const maxInputsInput = document.createElement('input');
+    maxInputsInput.type = 'number';
+    maxInputsInput.className = 'economy-input';
+    maxInputsInput.value = '3';
+    maxInputsInput.min = '0';
+    maxInputsInput.max = '10';
+    dialogContent.appendChild(maxInputsInput);
+
+    // Buttons
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'economy-dialog-buttons';
+    
+    const generateBtn = document.createElement('button');
+    generateBtn.className = 'economy-btn economy-btn-primary';
+    generateBtn.textContent = 'Generate';
+    generateBtn.addEventListener('click', async () => {
+      const numNodes = parseInt(nodesInput.value);
+      const maxDepth = parseInt(depthInput.value);
+      const minInputs = parseInt(minInputsInput.value);
+      const maxInputs = parseInt(maxInputsInput.value);
+
+      if (isNaN(numNodes) || numNodes < 1) {
+        alert('Number of nodes must be at least 1');
+        return;
+      }
+
+      if (isNaN(maxDepth) || maxDepth < 1) {
+        alert('Max depth must be at least 1');
+        return;
+      }
+
+      if (isNaN(minInputs) || minInputs < 0) {
+        alert('Min inputs must be non-negative');
+        return;
+      }
+
+      if (isNaN(maxInputs) || maxInputs < minInputs) {
+        alert('Max inputs must be >= min inputs');
+        return;
+      }
+
+      try {
+        // Generate random economy
+        const newManager = this.randomGenerator.generateRandomEconomy(
+          numNodes,
+          maxDepth,
+          minInputs,
+          maxInputs
+        );
+
+        // Replace current economy
+        this.economyManager.clear();
+        const economyData = newManager.serialize();
+        this.economyManager.loadFromData(economyData);
+        
+        this.deselectNode();
+        await this.updateVisualization();
+        this.updateNodeList();
+        
+        document.body.removeChild(dialog);
+      } catch (error) {
+        alert('Error generating economy: ' + error.message);
+        console.error('Generation error:', error);
+      }
+    });
+    buttonContainer.appendChild(generateBtn);
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'economy-btn';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => {
+      document.body.removeChild(dialog);
+    });
+    buttonContainer.appendChild(cancelBtn);
+    
+    dialogContent.appendChild(buttonContainer);
+    dialog.appendChild(dialogContent);
+    document.body.appendChild(dialog);
   }
 }
