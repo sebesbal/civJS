@@ -102,6 +102,8 @@ export class UIManager {
 
     // Test1 tab - ViewportController test
     this.testTabContainers.test1.id = 'test1-container';
+    this.testTabContainers.test1.style.height = '100%';
+    this.testTabContainers.test1.style.minHeight = '0';
     this.testEditorUI.appendChild(this.testTabContainers.test1);
 
     // Test2 tab - placeholder
