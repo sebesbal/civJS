@@ -1,29 +1,17 @@
-// Object Scene Test - 3D object manipulation based on EconomyEditorUI pattern
+// Object Scene Test - 3D object manipulation based on OrthographicViewerBase
 import * as THREE from 'three';
+import { OrthographicViewerBase } from '../utils/orthographic-viewer-base.js';
 
-export class ObjectSceneTest {
+export class ObjectSceneTest extends OrthographicViewerBase {
   constructor(container) {
+    super();
+    
     this.container = container;
-    this.canvasContainer = null;
     
     // Object management
     this.objects = new Map(); // id -> { mesh, data }
     this.nextObjectId = 1;
     this.selectedObjectId = null;
-    
-    // Three.js setup
-    this.scene = null;
-    this.camera = null;
-    this.renderer = null;
-    
-    // Camera controls
-    this.isPanning = false;
-    this.panStart = null;
-    this.cameraStartPosition = null;
-    this.minZoom = 2;
-    this.maxZoom = 1000;
-    this.currentZoom = 20;
-    this.calculatedMaxZoom = null;
     
     // Dragging objects
     this.isDraggingObject = false;
@@ -43,8 +31,8 @@ export class ObjectSceneTest {
     this.addObject('torus', { color: 0xffb86b, position: { x: -3, y: -3 } });
     this.addObject('cone', { color: 0xb86bff, position: { x: 3, y: -3 } });
     
-    // Fit view to content after adding objects
-    this.fitToScreen();
+    // Signal that content is ready - this fixes the timing issue
+    this.onContentReady();
   }
 
   createUI() {
@@ -66,30 +54,16 @@ export class ObjectSceneTest {
   }
 
   setupThreeJS() {
-    // Create scene
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0a0a0f);
-
-    // Create camera (orthographic for 2D-like view)
-    const aspect = 1;
-    const viewSize = this.currentZoom;
-    this.camera = new THREE.OrthographicCamera(
-      -viewSize * aspect, viewSize * aspect,
-      viewSize, -viewSize,
-      0.1, 1000
-    );
-    this.camera.position.set(0, 0, 50);
-    this.camera.lookAt(0, 0, 0);
-
-    // Create renderer
-    this.renderer = new THREE.WebGLRenderer({ 
-      antialias: true,
-      alpha: true
+    // Initialize base class Three.js setup
+    this.initializeThreeJS({
+      initialZoom: 20,
+      minZoom: 2,
+      maxZoom: 1000,
+      backgroundColor: 0x0a0a0f
     });
-    this.renderer.setPixelRatio(window.devicePixelRatio);
-    this.renderer.setSize(800, 600);
-    this.renderer.shadowMap.enabled = true;
-    this.canvasContainer.appendChild(this.renderer.domElement);
+
+    // Set camera Z position for 3D viewing
+    this.camera.position.z = 50;
 
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
@@ -107,16 +81,8 @@ export class ObjectSceneTest {
     // Add grid helper
     this.createGrid();
 
-    // Setup controls
-    this.setupCameraControls();
+    // Setup object interaction
     this.setupObjectInteraction();
-
-    // Handle resize
-    window.addEventListener('resize', () => this.handleResize());
-    new ResizeObserver(() => this.handleResize()).observe(this.canvasContainer);
-
-    // Start animation loop
-    this.animate();
   }
 
   createGrid() {
@@ -149,8 +115,8 @@ export class ObjectSceneTest {
     this.scene.add(new THREE.Line(yAxisGeom, yAxisMat));
   }
 
-  // Get bounding box of all objects
-  getBoundingBox() {
+  // Implement abstract method: get bounding box of all objects
+  getContentBoundingBox() {
     if (this.objects.size === 0) {
       return { minX: -10, maxX: 10, minY: -10, maxY: 10 };
     }
@@ -170,272 +136,59 @@ export class ObjectSceneTest {
     return { minX, maxX, minY, maxY };
   }
 
-  calculateMaxZoom() {
-    if (this.objects.size === 0) {
-      this.calculatedMaxZoom = 100;
-      return;
-    }
-    
-    const bbox = this.getBoundingBox();
-    const width = bbox.maxX - bbox.minX;
-    const height = bbox.maxY - bbox.minY;
-    const maxDim = Math.max(width, height);
-    
-    if (maxDim === 0) {
-      this.calculatedMaxZoom = 100;
-      return;
-    }
-    
-    // Calculate view size to fit the content with padding
-    const padding = 2;
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const aspect = rect.width / rect.height || 1;
-    
-    let viewSize;
-    if (width / height > aspect) {
-      viewSize = (maxDim / 2) + padding;
-    } else {
-      viewSize = ((maxDim / 2) + padding) / aspect;
-    }
-    
-    viewSize = Math.max(this.minZoom, viewSize);
-    this.calculatedMaxZoom = viewSize;
+  // Implement abstract method: check if there are objects
+  hasContent() {
+    return this.objects.size > 0;
   }
 
-  // Constrain camera so viewport always stays within content bounds
-  constrainCameraToContentBounds() {
-    if (!this.camera || !this.renderer || this.objects.size === 0) {
-      return;
-    }
+  // Override to handle object clicks before panning
+  handleMouseDownBeforePan(event) {
+    if (!this.renderer) return false;
     
-    const contentBbox = this.getBoundingBox();
-    
-    // Get viewport dimensions
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const aspect = rect.width / rect.height || 1;
-    const viewSize = this.currentZoom;
-    
-    // Calculate viewport bounds in world coordinates
-    const viewportHalfWidth = viewSize * aspect;
-    const viewportHalfHeight = viewSize;
-    
-    // Current viewport bounds
-    const viewportLeft = this.camera.position.x - viewportHalfWidth;
-    const viewportRight = this.camera.position.x + viewportHalfWidth;
-    const viewportBottom = this.camera.position.y - viewportHalfHeight;
-    const viewportTop = this.camera.position.y + viewportHalfHeight;
-    
-    // Content bounds with padding
-    const nodePadding = 1.5;
-    const contentLeft = contentBbox.minX - nodePadding;
-    const contentRight = contentBbox.maxX + nodePadding;
-    const contentBottom = contentBbox.minY - nodePadding;
-    const contentTop = contentBbox.maxY + nodePadding;
-    
-    // Clamp camera position so viewport stays within content bounds
-    let newCameraX = this.camera.position.x;
-    let newCameraY = this.camera.position.y;
-    
-    // Constrain horizontally
-    if (viewportRight > contentRight) {
-      newCameraX = contentRight - viewportHalfWidth;
-    }
-    if (viewportLeft < contentLeft) {
-      newCameraX = contentLeft + viewportHalfWidth;
-    }
-    
-    // Constrain vertically
-    if (viewportTop > contentTop) {
-      newCameraY = contentTop - viewportHalfHeight;
-    }
-    if (viewportBottom < contentBottom) {
-      newCameraY = contentBottom + viewportHalfHeight;
-    }
-    
-    // If viewport is larger than content, center it
-    const viewportWidth = viewportRight - viewportLeft;
-    const viewportHeight = viewportTop - viewportBottom;
-    const contentWidth = contentRight - contentLeft;
-    const contentHeight = contentTop - contentBottom;
-    
-    if (viewportWidth > contentWidth) {
-      newCameraX = (contentLeft + contentRight) / 2;
-    }
-    if (viewportHeight > contentHeight) {
-      newCameraY = (contentBottom + contentTop) / 2;
-    }
-    
-    // Update camera position if it changed
-    if (newCameraX !== this.camera.position.x || newCameraY !== this.camera.position.y) {
-      this.camera.position.x = newCameraX;
-      this.camera.position.y = newCameraY;
-      this.camera.lookAt(newCameraX, newCameraY, 0);
-    }
-    
-    // Also constrain zoom - ensure zoom doesn't allow viewport to exceed content bounds
-    const maxZoomForContent = Math.min(
-      contentWidth / (2 * aspect),
-      contentHeight / 2
-    );
-    
-    // If current zoom is too large (viewport too large), reduce it
-    if (this.currentZoom > maxZoomForContent) {
-      this.currentZoom = maxZoomForContent;
-      if (this.calculatedMaxZoom === null || this.currentZoom > this.calculatedMaxZoom) {
-        this.calculatedMaxZoom = this.currentZoom;
-      }
-      this.updateCameraViewSize();
-      this.constrainCameraToContentBounds();
-    }
-  }
-
-  fitToScreen() {
-    if (this.calculatedMaxZoom === null) {
-      this.calculateMaxZoom();
-    }
-    
-    if (!this.camera || this.objects.size === 0) return;
-    
-    const bbox = this.getBoundingBox();
-    
-    // Use calculated max zoom
-    const viewSize = this.calculatedMaxZoom || 20;
-    
-    // Update zoom to fit
-    this.currentZoom = viewSize;
-    this.updateCameraViewSize();
-    
-    // Center camera on content
-    const centerX = (bbox.minX + bbox.maxX) / 2;
-    const centerY = (bbox.minY + bbox.maxY) / 2;
-    this.camera.position.set(centerX, centerY, 50);
-    this.camera.lookAt(centerX, centerY, 0);
-    
-    // Apply constraints
-    this.constrainCameraToContentBounds();
-  }
-
-  setupCameraControls() {
-    this.panStart = new THREE.Vector2();
-    this.cameraStartPosition = new THREE.Vector2();
-
     const canvas = this.renderer.domElement;
+    const rect = canvas.getBoundingClientRect();
+    const mouse = new THREE.Vector2();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-    // Mouse down - start panning (left click, like economy editor)
-    canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 0) { // Left mouse button
-        this.isPanning = true;
-        this.panStart.set(e.clientX, e.clientY);
-        this.cameraStartPosition.set(this.camera.position.x, this.camera.position.y);
-        canvas.style.cursor = 'grabbing';
-      }
-    });
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, this.camera);
 
-    // Mouse move - pan camera
-    canvas.addEventListener('mousemove', (e) => {
-      if (this.isPanning) {
-        const deltaX = e.clientX - this.panStart.x;
-        const deltaY = e.clientY - this.panStart.y;
+    const meshes = Array.from(this.objects.values()).map(obj => obj.mesh);
+    const intersects = raycaster.intersectObjects(meshes);
 
-        const rect = canvas.getBoundingClientRect();
-        const aspect = rect.width / rect.height;
-        const viewSize = this.currentZoom;
-        const worldDeltaX = (deltaX / rect.width) * (viewSize * 2 * aspect);
-        const worldDeltaY = -(deltaY / rect.height) * (viewSize * 2);
-
-        this.camera.position.x = this.cameraStartPosition.x - worldDeltaX;
-        this.camera.position.y = this.cameraStartPosition.y - worldDeltaY;
-        this.camera.lookAt(this.camera.position.x, this.camera.position.y, 0);
+    if (intersects.length > 0) {
+      const clickedMesh = intersects[0].object;
+      const objectEntry = Array.from(this.objects.entries()).find(([_, obj]) => obj.mesh === clickedMesh);
+      
+      if (objectEntry) {
+        this.selectObject(objectEntry[0]);
         
-        // Constrain camera to content bounds
-        this.constrainCameraToContentBounds();
+        // Start dragging
+        this.isDraggingObject = true;
+        const worldPoint = intersects[0].point;
+        this.dragOffset.set(
+          clickedMesh.position.x - worldPoint.x,
+          clickedMesh.position.y - worldPoint.y
+        );
+        canvas.style.cursor = 'move';
+        return true; // Prevent panning
       }
-    });
-
-    // Mouse up - stop panning
-    canvas.addEventListener('mouseup', (e) => {
-      if (e.button === 0) {
-        this.isPanning = false;
-        canvas.style.cursor = 'default';
-      }
-    });
-
-    canvas.addEventListener('mouseleave', () => {
-      this.isPanning = false;
-      canvas.style.cursor = 'default';
-    });
-
-    // Wheel - zoom
-    canvas.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      
-      const zoomSpeed = 0.002;
-      const zoomDelta = e.deltaY * zoomSpeed;
-      let newZoom = this.currentZoom * (1 + zoomDelta);
-      
-      // Calculate max zoom if not already calculated
-      if (this.calculatedMaxZoom === null) {
-        this.calculateMaxZoom();
-      }
-      
-      // Clamp zoom to limits
-      const maxZoom = this.calculatedMaxZoom || this.maxZoom;
-      newZoom = Math.max(this.minZoom, Math.min(maxZoom, newZoom));
-      
-      if (newZoom !== this.currentZoom) {
-        this.currentZoom = newZoom;
-        this.updateCameraViewSize();
-        // Constrain camera to content bounds after zoom
-        this.constrainCameraToContentBounds();
-      }
-    });
-
-    // Prevent context menu
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    } else {
+      this.deselectObject();
+    }
+    
+    return false; // Allow panning
   }
 
   setupObjectInteraction() {
     const canvas = this.renderer.domElement;
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-
-    canvas.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return;
-
-      const rect = canvas.getBoundingClientRect();
-      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-
-      raycaster.setFromCamera(mouse, this.camera);
-
-      const meshes = Array.from(this.objects.values()).map(obj => obj.mesh);
-      const intersects = raycaster.intersectObjects(meshes);
-
-      if (intersects.length > 0) {
-        const clickedMesh = intersects[0].object;
-        const objectEntry = Array.from(this.objects.entries()).find(([_, obj]) => obj.mesh === clickedMesh);
-        
-        if (objectEntry) {
-          this.selectObject(objectEntry[0]);
-          
-          // Start dragging
-          this.isDraggingObject = true;
-          const worldPoint = intersects[0].point;
-          this.dragOffset.set(
-            clickedMesh.position.x - worldPoint.x,
-            clickedMesh.position.y - worldPoint.y
-          );
-          canvas.style.cursor = 'move';
-        }
-      } else {
-        this.deselectObject();
-      }
-    });
 
     canvas.addEventListener('mousemove', (e) => {
       if (!this.isDraggingObject || this.selectedObjectId === null) return;
 
       const rect = canvas.getBoundingClientRect();
+      const mouse = new THREE.Vector2();
       mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
@@ -462,54 +215,19 @@ export class ObjectSceneTest {
         canvas.style.cursor = 'default';
       }
     });
+
+    // Prevent context menu
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
-  updateCameraViewSize() {
-    if (!this.camera || !this.renderer) return;
-    
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const aspect = rect.width / rect.height;
-    const viewSize = this.currentZoom;
-    
-    this.camera.left = -viewSize * aspect;
-    this.camera.right = viewSize * aspect;
-    this.camera.top = viewSize;
-    this.camera.bottom = -viewSize;
-    this.camera.updateProjectionMatrix();
-  }
-
-  animate() {
-    requestAnimationFrame(() => this.animate());
-    
+  // Override animation hook to add custom animations
+  onAnimate() {
     // Rotate selected object for highlight effect
     this.objects.forEach((obj, id) => {
       if (id === this.selectedObjectId) {
         obj.mesh.rotation.z += 0.01;
       }
     });
-    
-    if (this.renderer && this.scene && this.camera) {
-      this.renderer.render(this.scene, this.camera);
-    }
-  }
-
-  handleResize() {
-    if (!this.renderer || !this.canvasContainer || !this.camera) return;
-    
-    const width = this.canvasContainer.clientWidth;
-    const height = this.canvasContainer.clientHeight;
-    
-    if (width === 0 || height === 0) return;
-    
-    // Update renderer size
-    this.renderer.setPixelRatio(window.devicePixelRatio || 1);
-    this.renderer.setSize(width, height);
-    
-    // Update camera view size
-    this.updateCameraViewSize();
-    
-    // Constrain camera to content bounds after resize
-    this.constrainCameraToContentBounds();
   }
 
   addObject(type, options = {}) {

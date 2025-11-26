@@ -1,14 +1,16 @@
 // Economy Editor UI - handles economy editor interface
 import * as THREE from 'three';
+import { OrthographicViewerBase } from '../utils/orthographic-viewer-base.js';
 import { EconomyManager } from './economy-manager.js';
 import { EconomyVisualizer } from './economy-visualizer.js';
 import { EconomySaveLoadManager } from './economy-save-load.js';
 import { RandomEconomyGenerator } from './random-economy-generator.js';
 
-export class EconomyEditorUI {
+export class EconomyEditorUI extends OrthographicViewerBase {
   constructor() {
+    super();
+    
     this.container = null;
-    this.canvasContainer = null;
     this.sidebar = null;
     this.propertiesPanel = null;
     
@@ -17,21 +19,7 @@ export class EconomyEditorUI {
     this.randomGenerator = new RandomEconomyGenerator();
     this.visualizer = null;
     
-    // Three.js setup
-    this.scene = null;
-    this.camera = null;
-    this.renderer = null;
-    
     this.selectedNodeId = null;
-    
-    // Camera controls
-    this.isPanning = false;
-    this.panStart = null;
-    this.cameraStartPosition = null;
-    this.minZoom = 2;
-    this.maxZoom = 1000; // Will be calculated based on graph size
-    this.currentZoom = 20; // Initial zoom level
-    this.calculatedMaxZoom = null; // Calculated max zoom based on graph size
     
     // Callbacks
     this.onSaveEconomy = null;
@@ -64,14 +52,9 @@ export class EconomyEditorUI {
       console.error('Error initializing visualizer:', err);
     }
     
-    // After visualization is set up, recalculate zoom constraints
-    // This is needed when the Eco tab is selected on page load
-    // (show() was called before the economy was loaded, so constraints weren't applied)
-    this.calculatedMaxZoom = null;
-    this.calculateMaxZoom();
-    this.constrainCameraToGraphBounds();
-    // Call handleResize to update camera with corrected zoom
-    this.handleResize();
+    // Signal that content is ready - this fixes the timing issue
+    // when the tab is selected before the economy is loaded
+    this.onContentReady();
   }
 
   // Load default economy file
@@ -194,32 +177,13 @@ export class EconomyEditorUI {
   }
 
   setupThreeJS() {
-    // Create scene
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a1a1a);
-
-    // Create camera (orthographic for true 2D view)
-    const aspect = 1; // Will be updated on resize
-    const viewSize = 20;
-    this.camera = new THREE.OrthographicCamera(
-      -viewSize * aspect, viewSize * aspect,
-      viewSize, -viewSize,
-      0.1, 1000
-    );
-    this.camera.position.set(0, 0, 10);
-    this.camera.lookAt(0, 0, 0);
-
-    // Create renderer with high quality settings
-    this.renderer = new THREE.WebGLRenderer({ 
-      antialias: true,
-      powerPreference: "high-performance",
-      precision: "highp"
+    // Initialize base class Three.js setup
+    this.initializeThreeJS({
+      initialZoom: 20,
+      minZoom: 2,
+      maxZoom: 1000,
+      backgroundColor: 0x1a1a1a
     });
-    this.renderer.setPixelRatio(window.devicePixelRatio || 1); // Use device pixel ratio for crisp rendering
-    this.renderer.setSize(800, 600);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.canvasContainer.appendChild(this.renderer.domElement);
 
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -230,320 +194,35 @@ export class EconomyEditorUI {
 
     // Create visualizer
     this.visualizer = new EconomyVisualizer(this.scene, this.camera, this.renderer);
-    // Store reference for default economy loading (will be set after loading default economy)
-    this.visualizerReady = Promise.resolve();
-
-    // Camera controls
-    this.setupCameraControls();
 
     // Handle canvas clicks
     this.renderer.domElement.addEventListener('click', (e) => this.handleCanvasClick(e));
-    
-    // Handle window resize
-    window.addEventListener('resize', () => this.handleResize());
-
-    // Start animation loop
-    this.animate();
   }
 
-  setupCameraControls() {
-    // Initialize pan state
-    this.panStart = new THREE.Vector2();
-    this.cameraStartPosition = new THREE.Vector2();
-
-    const canvas = this.renderer.domElement;
-
-    // Mouse down - start panning
-    canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 0) { // Left mouse button
-        this.isPanning = true;
-        this.panStart.set(e.clientX, e.clientY);
-        this.cameraStartPosition.set(this.camera.position.x, this.camera.position.y);
-        canvas.style.cursor = 'grabbing';
-      }
-    });
-
-    // Mouse move - pan camera
-    canvas.addEventListener('mousemove', (e) => {
-      if (this.isPanning) {
-        const deltaX = e.clientX - this.panStart.x;
-        const deltaY = e.clientY - this.panStart.y;
-
-        // Convert screen delta to world delta
-        const rect = canvas.getBoundingClientRect();
-        const aspect = rect.width / rect.height;
-        const viewSize = this.currentZoom;
-        const worldDeltaX = (deltaX / rect.width) * (viewSize * 2 * aspect);
-        const worldDeltaY = -(deltaY / rect.height) * (viewSize * 2); // Negative for correct Y direction
-
-        this.camera.position.x = this.cameraStartPosition.x - worldDeltaX;
-        this.camera.position.y = this.cameraStartPosition.y - worldDeltaY;
-        this.camera.lookAt(this.camera.position.x, this.camera.position.y, 0);
-        
-        // Constrain camera to graph bounds
-        this.constrainCameraToGraphBounds();
-      }
-    });
-
-    // Mouse up - stop panning
-    canvas.addEventListener('mouseup', (e) => {
-      if (e.button === 0) {
-        this.isPanning = false;
-        canvas.style.cursor = 'default';
-      }
-    });
-
-    // Mouse leave - stop panning
-    canvas.addEventListener('mouseleave', () => {
-      this.isPanning = false;
-      canvas.style.cursor = 'default';
-    });
-
-    // Wheel - zoom
-    canvas.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      
-      // Smoother zoom - use exponential scaling with smaller multiplier
-      const zoomSpeed = 0.002; // Small multiplier for smooth zooming
-      const zoomDelta = e.deltaY * zoomSpeed;
-      let newZoom = this.currentZoom * (1 + zoomDelta);
-      
-      // Calculate max zoom if not already calculated
-      if (this.calculatedMaxZoom === null) {
-        this.calculateMaxZoom();
-      }
-      
-      // Clamp zoom to limits
-      const maxZoom = this.calculatedMaxZoom || this.maxZoom;
-      newZoom = Math.max(this.minZoom, Math.min(maxZoom, newZoom));
-      
-      if (newZoom !== this.currentZoom) {
-        this.currentZoom = newZoom;
-        if (this.visualizer) {
-          this.visualizer.updateCameraViewSize(this.currentZoom);
-        }
-        // Constrain camera to graph bounds after zoom
-        this.constrainCameraToGraphBounds();
-      }
-    });
-  }
-
-  animate() {
-    requestAnimationFrame(() => this.animate());
-    if (this.renderer && this.scene && this.camera) {
-      this.renderer.render(this.scene, this.camera);
-    }
-  }
-
-  calculateMaxZoom() {
-    if (!this.economyManager || !this.visualizer) {
-      this.calculatedMaxZoom = 100; // Default fallback
-      return;
+  // Implement abstract method: get bounding box from economy layout
+  getContentBoundingBox() {
+    if (!this.economyManager || !this.visualizer || !this.visualizer.layout) {
+      return { minX: -10, maxX: 10, minY: -10, maxY: 10 };
     }
     
+    return this.visualizer.layout.getBoundingBox(this.economyManager);
+  }
+
+  // Implement abstract method: check if economy has nodes
+  hasContent() {
+    if (!this.economyManager) return false;
     const nodes = this.economyManager.getAllNodes();
-    if (nodes.length === 0) {
-      this.calculatedMaxZoom = 100; // Default fallback
-      return;
-    }
-    
-    // Get bounding box from layout
-    const layout = this.visualizer.layout;
-    if (!layout) {
-      this.calculatedMaxZoom = 100; // Default fallback
-      return;
-    }
-    
-    const bbox = layout.getBoundingBox(this.economyManager);
-    const width = bbox.maxX - bbox.minX;
-    const height = bbox.maxY - bbox.minY;
-    const maxDim = Math.max(width, height);
-    
-    if (maxDim === 0) {
-      this.calculatedMaxZoom = 100; // Default fallback
-      return;
-    }
-    
-    // Calculate view size to fit the graph with padding
-    const padding = 2;
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const aspect = rect.width / rect.height || 1;
-    
-    // Calculate view size needed to fit the graph
-    let viewSize;
-    if (width / height > aspect) {
-      // Graph is wider than viewport aspect ratio
-      viewSize = (maxDim / 2) + padding;
-    } else {
-      // Graph is taller than viewport aspect ratio
-      viewSize = ((maxDim / 2) + padding) / aspect;
-    }
-    
-    // Ensure we don't go below min zoom
-    viewSize = Math.max(this.minZoom, viewSize);
-    
-    // Set calculated max zoom (this is the zoom level that fits the graph)
-    this.calculatedMaxZoom = viewSize;
+    return nodes.length > 0;
   }
 
-  // Constrain camera so that the viewport (r1) always stays within graph bounds (r2)
-  constrainCameraToGraphBounds() {
-    if (!this.economyManager || !this.visualizer || !this.camera || !this.renderer) {
-      return;
-    }
+  // Override to update visualizer's camera view size when zooming
+  updateCameraViewSize() {
+    super.updateCameraViewSize();
     
-    const nodes = this.economyManager.getAllNodes();
-    if (nodes.length === 0) {
-      return;
-    }
-    
-    // Get graph bounding box (r2)
-    const layout = this.visualizer.layout;
-    if (!layout) {
-      return;
-    }
-    
-    const graphBbox = layout.getBoundingBox(this.economyManager);
-    
-    // Get viewport dimensions (r1)
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    const aspect = rect.width / rect.height || 1;
-    const viewSize = this.currentZoom;
-    
-    // Calculate viewport bounds in world coordinates
-    const viewportHalfWidth = viewSize * aspect;
-    const viewportHalfHeight = viewSize;
-    
-    // Current viewport bounds (r1)
-    const viewportLeft = this.camera.position.x - viewportHalfWidth;
-    const viewportRight = this.camera.position.x + viewportHalfWidth;
-    const viewportBottom = this.camera.position.y - viewportHalfHeight;
-    const viewportTop = this.camera.position.y + viewportHalfHeight;
-    
-    // Graph bounds (r2) - add padding for node sizes
-    const nodePadding = 1.5; // Account for node width/height
-    const graphLeft = graphBbox.minX - nodePadding;
-    const graphRight = graphBbox.maxX + nodePadding;
-    const graphBottom = graphBbox.minY - nodePadding;
-    const graphTop = graphBbox.maxY + nodePadding;
-    
-    // Clamp camera position so viewport stays within graph bounds
-    let newCameraX = this.camera.position.x;
-    let newCameraY = this.camera.position.y;
-    
-    // Constrain horizontally
-    if (viewportRight > graphRight) {
-      newCameraX = graphRight - viewportHalfWidth;
-    }
-    if (viewportLeft < graphLeft) {
-      newCameraX = graphLeft + viewportHalfWidth;
-    }
-    
-    // Constrain vertically
-    if (viewportTop > graphTop) {
-      newCameraY = graphTop - viewportHalfHeight;
-    }
-    if (viewportBottom < graphBottom) {
-      newCameraY = graphBottom + viewportHalfHeight;
-    }
-    
-    // If viewport is larger than graph, center it
-    const viewportWidth = viewportRight - viewportLeft;
-    const viewportHeight = viewportTop - viewportBottom;
-    const graphWidth = graphRight - graphLeft;
-    const graphHeight = graphTop - graphBottom;
-    
-    if (viewportWidth > graphWidth) {
-      newCameraX = (graphLeft + graphRight) / 2;
-    }
-    if (viewportHeight > graphHeight) {
-      newCameraY = (graphBottom + graphTop) / 2;
-    }
-    
-    // Update camera position if it changed
-    if (newCameraX !== this.camera.position.x || newCameraY !== this.camera.position.y) {
-      this.camera.position.x = newCameraX;
-      this.camera.position.y = newCameraY;
-      this.camera.lookAt(newCameraX, newCameraY, 0);
-    }
-    
-    // Also constrain zoom - ensure zoom doesn't allow viewport to exceed graph bounds
-    // Calculate maximum allowed zoom (view size) to fit graph
-    // Viewport width = 2 * viewSize * aspect, must be <= graphWidth
-    // Viewport height = 2 * viewSize, must be <= graphHeight
-    // So: viewSize <= graphWidth / (2 * aspect) AND viewSize <= graphHeight / 2
-    // Maximum allowed viewSize is the minimum of these two
-    const maxZoomForGraph = Math.min(
-      graphWidth / (2 * aspect),
-      graphHeight / 2
-    );
-    
-    // If current zoom is too large (viewport too large), reduce it
-    if (this.currentZoom > maxZoomForGraph) {
-      this.currentZoom = maxZoomForGraph;
-      // Update calculatedMaxZoom to reflect this constraint
-      if (this.calculatedMaxZoom === null || this.currentZoom > this.calculatedMaxZoom) {
-        this.calculatedMaxZoom = this.currentZoom;
-      }
+    // Also update the visualizer's camera if it exists
+    if (this.visualizer) {
       this.visualizer.updateCameraViewSize(this.currentZoom);
-      // Recalculate camera position after zoom change
-      this.constrainCameraToGraphBounds();
     }
-  }
-
-  fitGraphToScreen() {
-    if (this.calculatedMaxZoom === null) {
-      this.calculateMaxZoom();
-    }
-    
-    if (!this.economyManager || !this.visualizer || !this.camera) return;
-    
-    const nodes = this.economyManager.getAllNodes();
-    if (nodes.length === 0) return;
-    
-    // Get bounding box from layout
-    const layout = this.visualizer.layout;
-    if (!layout) return;
-    
-    const bbox = layout.getBoundingBox(this.economyManager);
-    
-    // Use calculated max zoom
-    const viewSize = this.calculatedMaxZoom || 20;
-    
-    // Update zoom to fit
-    this.currentZoom = viewSize;
-    this.visualizer.updateCameraViewSize(this.currentZoom);
-    
-    // Center camera on graph
-    const centerX = (bbox.minX + bbox.maxX) / 2;
-    const centerY = (bbox.minY + bbox.maxY) / 2;
-    this.camera.position.set(centerX, centerY, 10);
-    this.camera.lookAt(centerX, centerY, 0);
-    
-    // Apply constraints
-    this.constrainCameraToGraphBounds();
-  }
-
-  handleResize() {
-    if (!this.renderer || !this.canvasContainer || !this.camera) return;
-    
-    const width = this.canvasContainer.clientWidth;
-    const height = this.canvasContainer.clientHeight;
-    
-    // Update orthographic camera bounds with current zoom level
-    const aspect = width / height;
-    const viewSize = this.currentZoom || 20;
-    this.camera.left = -viewSize * aspect;
-    this.camera.right = viewSize * aspect;
-    this.camera.top = viewSize;
-    this.camera.bottom = -viewSize;
-    this.camera.updateProjectionMatrix();
-    // Use device pixel ratio for crisp rendering
-    this.renderer.setPixelRatio(window.devicePixelRatio || 1);
-    this.renderer.setSize(width, height);
-    
-    // Constrain camera to graph bounds after resize
-    this.constrainCameraToGraphBounds();
   }
 
   handleCanvasClick(event) {
@@ -823,11 +502,8 @@ export class EconomyEditorUI {
   async updateVisualization() {
     if (this.visualizer) {
       await this.visualizer.updateVisualization();
-      // Recalculate max zoom after visualization updates
-      this.calculatedMaxZoom = null;
-      this.calculateMaxZoom();
-      // Apply constraints after visualization update
-      this.constrainCameraToGraphBounds();
+      // Signal content update to base class
+      this.onContentReady();
     }
   }
 
