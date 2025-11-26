@@ -1,7 +1,9 @@
 import { ViewportController } from '../utils/viewport-controller.js';
+import { CanvasTestBase } from './canvas-test-base.js';
 
-export class ViewportControllerTest {
+export class ViewportControllerTest extends CanvasTestBase {
   constructor(container) {
+    super();
     this.container = container;
     this.viewportController = null;
     this.canvas = null;
@@ -23,62 +25,8 @@ export class ViewportControllerTest {
     this.draw();
   }
 
-  resizeCanvas() {
-    if (!this.canvasContainer || !this.canvas || !this.container) return;
-    
-    // Get the container's available space
-    const containerRect = this.container.getBoundingClientRect();
-    
-    // If container hasn't been laid out yet (very small or zero size), retry
-    if (containerRect.width < 100 || containerRect.height < 100) {
-      if (!this._resizeRetryCount) {
-        this._resizeRetryCount = 0;
-      }
-      if (this._resizeRetryCount < 5) {
-        this._resizeRetryCount++;
-        setTimeout(() => this.resizeCanvas(), 50);
-        return;
-      }
-      // If still not laid out after retries, skip this resize
-      return;
-    }
-    this._resizeRetryCount = 0; // Reset counter on successful resize
-    
-    // Get the canvas container's size (the flex child that should contain the canvas)
-    const canvasContainerRect = this.canvasContainer.getBoundingClientRect();
-    
-    // Calculate available space in canvas container (minus padding)
-    const padding = 20; // 10px padding on each side
-    let newWidth = Math.max(100, Math.floor(canvasContainerRect.width - padding));
-    let newHeight = Math.max(100, Math.floor(canvasContainerRect.height - padding));
-    
-    // Safety check: ensure canvas doesn't exceed the container's bounds
-    // The container should be constrained by its parent, but double-check
-    const maxWidthFromContainer = containerRect.width - 40; // Account for container padding
-    const maxHeightFromContainer = containerRect.height - 250; // Account for title, controls, instructions
-    
-    if (newWidth > maxWidthFromContainer && maxWidthFromContainer > 100) {
-      newWidth = Math.floor(maxWidthFromContainer);
-    }
-    if (newHeight > maxHeightFromContainer && maxHeightFromContainer > 100) {
-      newHeight = Math.floor(maxHeightFromContainer);
-    }
-    
-    // Final safety: don't exceed viewport (shouldn't happen, but just in case)
-    const maxViewportWidth = window.innerWidth - 250;
-    const maxViewportHeight = window.innerHeight - 50;
-    if (newWidth > maxViewportWidth && maxViewportWidth > 100) {
-      newWidth = Math.floor(maxViewportWidth);
-    }
-    if (newHeight > maxViewportHeight && maxViewportHeight > 100) {
-      newHeight = Math.floor(maxViewportHeight);
-    }
-    
-    // Ensure minimum size
-    newWidth = Math.max(100, newWidth);
-    newHeight = Math.max(100, newHeight);
-    
-    // Update canvas internal size to match display size for crisp rendering
+  onResized(newWidth, newHeight) {
+    // Update canvas size
     this.canvas.width = newWidth;
     this.canvas.height = newHeight;
     
@@ -226,29 +174,9 @@ export class ViewportControllerTest {
     canvasContainer.appendChild(this.canvas);
     this.container.appendChild(canvasContainer);
 
-    // Store canvas container reference for resize handling
+    // Store canvas container reference and set up resize handling
     this.canvasContainer = canvasContainer;
-    
-    // Set up resize observer to update canvas size
-    this.resizeObserver = new ResizeObserver(() => {
-      this.resizeCanvas();
-    });
-    this.resizeObserver.observe(canvasContainer);
-    this.resizeObserver.observe(this.container);
-    
-    // Also listen to window resize
-    this.windowResizeHandler = () => {
-      this.resizeCanvas();
-    };
-    window.addEventListener('resize', this.windowResizeHandler);
-    
-    // Initial resize - wait for layout to settle
-    // Use multiple requestAnimationFrame calls to ensure layout is complete
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        this.resizeCanvas();
-      });
-    });
+    this.setupResizeHandling();
 
     // Instructions
     const instructions = document.createElement('div');
