@@ -9,8 +9,9 @@ export class ViewportControllerTest {
     this.isDragging = false;
     this.lastMousePos = { x: 0, y: 0 };
     
-    // Default rectangle sizes (small to fit on page)
-    this.viewportRect = { x: 50, y: 50, width: 300, height: 200 };
+    // Default rectangle sizes - viewport centered on canvas
+    // Canvas will be 600x400, so center viewport at (150, 100)
+    this.viewportRect = { x: 150, y: 100, width: 300, height: 200 };
     this.boundsRect = { x: 0, y: 0, width: 600, height: 400 };
     
     this.init();
@@ -27,46 +28,49 @@ export class ViewportControllerTest {
     this.container.innerHTML = '';
     this.container.style.display = 'flex';
     this.container.style.flexDirection = 'column';
-    this.container.style.gap = '20px';
-    this.container.style.padding = '20px';
-    this.container.style.overflow = 'auto';
+    this.container.style.gap = '10px';
+    this.container.style.padding = '10px';
+    this.container.style.overflow = 'hidden';
+    this.container.style.height = '100vh';
 
     // Title
     const title = document.createElement('h2');
     title.textContent = 'ViewportController Test';
     title.style.margin = '0';
+    title.style.fontSize = '18px';
     this.container.appendChild(title);
 
     // Controls panel
     const controlsPanel = document.createElement('div');
     controlsPanel.style.display = 'grid';
     controlsPanel.style.gridTemplateColumns = '1fr 1fr';
-    controlsPanel.style.gap = '15px';
-    controlsPanel.style.padding = '15px';
+    controlsPanel.style.gap = '10px';
+    controlsPanel.style.padding = '10px';
     controlsPanel.style.background = 'rgba(40, 40, 40, 0.8)';
     controlsPanel.style.borderRadius = '8px';
     controlsPanel.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+    controlsPanel.style.flexShrink = '0';
 
     // Viewport rectangle controls
     const viewportSection = document.createElement('div');
     viewportSection.innerHTML = `
-      <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #4a9eff;">Viewport Rectangle</h3>
-      <div style="display: flex; flex-direction: column; gap: 8px;">
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <label style="width: 60px; font-size: 12px;">X:</label>
-          <input type="number" id="viewport-x" value="${this.viewportRect.x}" style="flex: 1; padding: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff;">
+      <h3 style="margin: 0 0 6px 0; font-size: 12px; color: #4a9eff;">Viewport Rectangle</h3>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <label style="width: 50px; font-size: 11px;">X:</label>
+          <input type="number" id="viewport-x" value="${this.viewportRect.x}" style="flex: 1; padding: 4px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff; font-size: 11px;">
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <label style="width: 60px; font-size: 12px;">Y:</label>
-          <input type="number" id="viewport-y" value="${this.viewportRect.y}" style="flex: 1; padding: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff;">
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <label style="width: 50px; font-size: 11px;">Y:</label>
+          <input type="number" id="viewport-y" value="${this.viewportRect.y}" style="flex: 1; padding: 4px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff; font-size: 11px;">
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <label style="width: 60px; font-size: 12px;">Width:</label>
-          <input type="number" id="viewport-width" value="${this.viewportRect.width}" style="flex: 1; padding: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff;">
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <label style="width: 50px; font-size: 11px;">W:</label>
+          <input type="number" id="viewport-width" value="${this.viewportRect.width}" style="flex: 1; padding: 4px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff; font-size: 11px;">
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <label style="width: 60px; font-size: 12px;">Height:</label>
-          <input type="number" id="viewport-height" value="${this.viewportRect.height}" style="flex: 1; padding: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff;">
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <label style="width: 50px; font-size: 11px;">H:</label>
+          <input type="number" id="viewport-height" value="${this.viewportRect.height}" style="flex: 1; padding: 4px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff; font-size: 11px;">
         </div>
       </div>
     `;
@@ -75,23 +79,23 @@ export class ViewportControllerTest {
     // Bounds rectangle controls
     const boundsSection = document.createElement('div');
     boundsSection.innerHTML = `
-      <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #ff6b6b;">Bounds Rectangle</h3>
-      <div style="display: flex; flex-direction: column; gap: 8px;">
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <label style="width: 60px; font-size: 12px;">X:</label>
-          <input type="number" id="bounds-x" value="${this.boundsRect.x}" style="flex: 1; padding: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff;">
+      <h3 style="margin: 0 0 6px 0; font-size: 12px; color: #ff6b6b;">Bounds Rectangle</h3>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <label style="width: 50px; font-size: 11px;">X:</label>
+          <input type="number" id="bounds-x" value="${this.boundsRect.x}" style="flex: 1; padding: 4px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff; font-size: 11px;">
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <label style="width: 60px; font-size: 12px;">Y:</label>
-          <input type="number" id="bounds-y" value="${this.boundsRect.y}" style="flex: 1; padding: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff;">
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <label style="width: 50px; font-size: 11px;">Y:</label>
+          <input type="number" id="bounds-y" value="${this.boundsRect.y}" style="flex: 1; padding: 4px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff; font-size: 11px;">
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <label style="width: 60px; font-size: 12px;">Width:</label>
-          <input type="number" id="bounds-width" value="${this.boundsRect.width}" style="flex: 1; padding: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff;">
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <label style="width: 50px; font-size: 11px;">W:</label>
+          <input type="number" id="bounds-width" value="${this.boundsRect.width}" style="flex: 1; padding: 4px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff; font-size: 11px;">
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <label style="width: 60px; font-size: 12px;">Height:</label>
-          <input type="number" id="bounds-height" value="${this.boundsRect.height}" style="flex: 1; padding: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff;">
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <label style="width: 50px; font-size: 11px;">H:</label>
+          <input type="number" id="bounds-height" value="${this.boundsRect.height}" style="flex: 1; padding: 4px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: #fff; font-size: 11px;">
         </div>
       </div>
     `;
@@ -105,17 +109,21 @@ export class ViewportControllerTest {
     canvasContainer.style.background = '#2a2a2a';
     canvasContainer.style.border = '2px solid rgba(255, 255, 255, 0.2)';
     canvasContainer.style.borderRadius = '8px';
-    canvasContainer.style.padding = '20px';
+    canvasContainer.style.padding = '10px';
     canvasContainer.style.display = 'flex';
     canvasContainer.style.justifyContent = 'center';
     canvasContainer.style.alignItems = 'center';
+    canvasContainer.style.flex = '1';
+    canvasContainer.style.minHeight = '0';
 
     this.canvas = document.createElement('canvas');
-    this.canvas.width = 800;
-    this.canvas.height = 500;
+    this.canvas.width = 600;
+    this.canvas.height = 400;
     this.canvas.style.cursor = 'grab';
     this.canvas.style.border = '1px solid rgba(255, 255, 255, 0.1)';
     this.canvas.style.borderRadius = '4px';
+    this.canvas.style.maxWidth = '100%';
+    this.canvas.style.maxHeight = '100%';
     this.ctx = this.canvas.getContext('2d');
 
     canvasContainer.appendChild(this.canvas);
@@ -123,16 +131,14 @@ export class ViewportControllerTest {
 
     // Instructions
     const instructions = document.createElement('div');
-    instructions.style.padding = '10px';
+    instructions.style.padding = '6px';
     instructions.style.background = 'rgba(74, 158, 255, 0.1)';
     instructions.style.borderRadius = '6px';
-    instructions.style.fontSize = '12px';
+    instructions.style.fontSize = '11px';
     instructions.style.color = '#aaa';
+    instructions.style.flexShrink = '0';
     instructions.innerHTML = `
-      <strong>Instructions:</strong><br>
-      • Drag to pan<br>
-      • Mouse wheel to zoom<br>
-      • Change rectangle sizes using the input fields above
+      <strong>Instructions:</strong> Drag to pan • Mouse wheel to zoom • Change rectangle sizes using the input fields above
     `;
     this.container.appendChild(instructions);
   }
