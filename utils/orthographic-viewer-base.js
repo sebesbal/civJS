@@ -463,9 +463,29 @@ export class OrthographicViewerBase {
    * This fixes the timing issue when the tab is selected before content is loaded.
    */
   onContentReady() {
+    // Check if container has proper dimensions
+    const width = this.canvasContainer?.clientWidth || 0;
+    const height = this.canvasContainer?.clientHeight || 0;
+    
+    if (width === 0 || height === 0) {
+      // Container not visible yet, schedule retry
+      this._contentReadyPending = true;
+      requestAnimationFrame(() => this.onContentReady());
+      return;
+    }
+    
+    this._contentReadyPending = false;
+    
     // Recalculate zoom constraints now that content is available
     this.calculatedMaxZoom = null;
     this.calculateMaxZoom();
+    
+    // Set currentZoom to max (fit to screen) if zoom exceeds calculated max
+    if (this.currentZoom > this.calculatedMaxZoom) {
+      this.currentZoom = this.calculatedMaxZoom;
+    }
+    
+    this.updateCameraViewSize();
     this.constrainCameraToContentBounds();
     
     // Call handleResize to update camera with corrected zoom
