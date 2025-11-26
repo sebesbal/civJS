@@ -316,12 +316,11 @@ export class ViewportControllerTest {
         const deltaX = currentMousePos.x - this.lastMousePos.x;
         const deltaY = currentMousePos.y - this.lastMousePos.y;
         
-        // Convert canvas delta to bounds delta
-        const scale = this.viewportController.getScale();
-        const boundsDeltaX = deltaX / scale.scaleX;
-        const boundsDeltaY = deltaY / scale.scaleY;
-        
-        this.viewportController.pan(boundsDeltaX, boundsDeltaY);
+        // For 1:1 panning: when mouse moves, content should move by the same amount on screen
+        // The pan method moves the bounds rectangle. When you drag right, you want content to follow
+        // the mouse (move right), which means bounds should move in the same direction.
+        // Since pan() moves bounds directly, we use raw delta for 1:1 movement
+        this.viewportController.pan(deltaX, deltaY);
         this.updateBoundsInputs();
         this.draw();
         
