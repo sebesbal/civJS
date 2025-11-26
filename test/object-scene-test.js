@@ -37,10 +37,20 @@ export class ObjectSceneTest extends OrthographicViewerBase {
 
   createUI() {
     this.container.innerHTML = '';
-    this.container.style.display = 'flex';
-    this.container.style.flexDirection = 'column';
+    // Don't set display on container - the UI manager controls that
+    // Use an inner wrapper for the flex layout instead
     this.container.style.height = '100%';
     this.container.style.background = '#0d0d0d';
+
+    // Inner wrapper for flex layout (not affected by UI manager's display changes)
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      width: 100%;
+    `;
+    this.container.appendChild(wrapper);
 
     // Canvas container (full area)
     this.canvasContainer = document.createElement('div');
@@ -50,7 +60,7 @@ export class ObjectSceneTest extends OrthographicViewerBase {
       background: #0a0a0f;
       overflow: hidden;
     `;
-    this.container.appendChild(this.canvasContainer);
+    wrapper.appendChild(this.canvasContainer);
   }
 
   setupThreeJS() {
