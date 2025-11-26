@@ -34,7 +34,6 @@ export class OrthographicViewerBase {
     this.calculatedMaxZoom = null;
     
     // Initialization state
-    this._contentReady = false;
     this._animationStarted = false;
   }
 
@@ -398,8 +397,6 @@ export class OrthographicViewerBase {
    * This fixes the timing issue when the tab is selected before content is loaded.
    */
   onContentReady() {
-    this._contentReady = true;
-    
     // Recalculate zoom constraints now that content is available
     this.calculatedMaxZoom = null;
     this.calculateMaxZoom();
