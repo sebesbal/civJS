@@ -118,12 +118,17 @@ export class UIManager {
 
     // Initialize Test1 with ViewportController test
     this.viewportControllerTest = null;
-    this.currentTestTab = 'test1';
-    this.setTestTab('test1');
+    // Load saved test tab from localStorage, default to 'test1'
+    const savedTestTab = localStorage.getItem('lastTestTab') || 'test1';
+    this.currentTestTab = savedTestTab;
+    this.setTestTab(savedTestTab);
   }
 
   setTestTab(tabName) {
     this.currentTestTab = tabName;
+
+    // Save the selected test tab to localStorage
+    localStorage.setItem('lastTestTab', tabName);
 
     // Update button states
     [this.test1Btn, this.test2Btn, this.test3Btn].forEach(btn => {
@@ -220,6 +225,11 @@ export class UIManager {
       }
       if (this.testToolbar) {
         this.testToolbar.style.display = 'flex';
+      }
+      // Restore the saved test tab when switching to TEST_EDITOR
+      if (this.testTabContainers) {
+        const savedTestTab = localStorage.getItem('lastTestTab') || 'test1';
+        this.setTestTab(savedTestTab);
       }
       // Hide the map renderer
       if (this.renderer) {
