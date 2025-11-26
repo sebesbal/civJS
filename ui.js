@@ -1,6 +1,7 @@
 // UI Manager - coordinates different editor UIs
 import { MapEditorUI } from './map-editor/map-editor-ui.js';
 import { EconomyEditorUI } from './economy-editor/economy-editor-ui.js';
+import { ViewportControllerTest } from './test/viewport-controller-test.js';
 
 export class UIManager {
   constructor() {
@@ -38,53 +39,106 @@ export class UIManager {
     this.testToolbar.style.position = 'fixed';
     this.testToolbar.style.left = '60px';
     this.testToolbar.style.top = '0';
-    this.testToolbar.style.width = '60px';
+    this.testToolbar.style.width = 'auto';
+    this.testToolbar.style.minWidth = '60px';
     this.testToolbar.style.height = '100vh';
     this.testToolbar.style.background = 'rgba(20, 20, 20, 0.95)';
     this.testToolbar.style.backdropFilter = 'blur(10px)';
     this.testToolbar.style.color = '#ffffff';
-    this.testToolbar.style.padding = '10px 0';
+    this.testToolbar.style.padding = '10px';
     this.testToolbar.style.zIndex = '2000';
     this.testToolbar.style.boxShadow = '2px 0 10px rgba(0, 0, 0, 0.3)';
     this.testToolbar.style.display = 'none';
     this.testToolbar.style.flexDirection = 'column';
-    this.testToolbar.style.alignItems = 'center';
+    this.testToolbar.style.alignItems = 'stretch';
     this.testToolbar.style.gap = '10px';
     document.body.appendChild(this.testToolbar);
 
     // Create toolbar items
-    const test1Btn = document.createElement('button');
-    test1Btn.className = 'toolbar-item';
-    test1Btn.textContent = 'Test1';
-    test1Btn.title = 'Test1';
-    this.testToolbar.appendChild(test1Btn);
+    this.test1Btn = document.createElement('button');
+    this.test1Btn.className = 'toolbar-item test-toolbar-item';
+    this.test1Btn.textContent = 'ViewportController';
+    this.test1Btn.title = 'ViewportController';
+    this.test1Btn.dataset.testTab = 'test1';
+    this.test1Btn.addEventListener('click', () => this.setTestTab('test1'));
+    this.testToolbar.appendChild(this.test1Btn);
 
-    const test2Btn = document.createElement('button');
-    test2Btn.className = 'toolbar-item';
-    test2Btn.textContent = 'Test2';
-    test2Btn.title = 'Test2';
-    this.testToolbar.appendChild(test2Btn);
+    this.test2Btn = document.createElement('button');
+    this.test2Btn.className = 'toolbar-item test-toolbar-item';
+    this.test2Btn.textContent = 'Test2';
+    this.test2Btn.title = 'Test2';
+    this.test2Btn.dataset.testTab = 'test2';
+    this.test2Btn.addEventListener('click', () => this.setTestTab('test2'));
+    this.testToolbar.appendChild(this.test2Btn);
 
-    const test3Btn = document.createElement('button');
-    test3Btn.className = 'toolbar-item';
-    test3Btn.textContent = 'Test3';
-    test3Btn.title = 'Test3';
-    this.testToolbar.appendChild(test3Btn);
+    this.test3Btn = document.createElement('button');
+    this.test3Btn.className = 'toolbar-item test-toolbar-item';
+    this.test3Btn.textContent = 'Test3';
+    this.test3Btn.title = 'Test3';
+    this.test3Btn.dataset.testTab = 'test3';
+    this.test3Btn.addEventListener('click', () => this.setTestTab('test3'));
+    this.testToolbar.appendChild(this.test3Btn);
 
-    // Create a simple test editor UI container
+    // Create test editor UI container with tabs
     this.testEditorUI = document.createElement('div');
     this.testEditorUI.id = 'test-editor-ui';
     this.testEditorUI.style.display = 'none';
     this.testEditorUI.style.position = 'fixed';
     this.testEditorUI.style.top = '0';
-    this.testEditorUI.style.left = '120px'; // Account for both toolbars
-    this.testEditorUI.style.width = 'calc(100% - 120px)';
+    this.testEditorUI.style.left = '200px'; // Account for main toolbar (60px) + test toolbar (auto, ~140px)
+    this.testEditorUI.style.width = 'calc(100% - 200px)';
     this.testEditorUI.style.height = '100vh';
     this.testEditorUI.style.background = '#1a1a1a';
     this.testEditorUI.style.color = '#ffffff';
-    this.testEditorUI.style.padding = '20px';
-    this.testEditorUI.innerHTML = '<h1>Test Editor</h1><p>This is the test editor interface.</p>';
+    this.testEditorUI.style.overflow = 'auto';
     document.body.appendChild(this.testEditorUI);
+
+    // Create tab containers
+    this.testTabContainers = {
+      test1: document.createElement('div'),
+      test2: document.createElement('div'),
+      test3: document.createElement('div')
+    };
+
+    // Test1 tab - ViewportController test
+    this.testTabContainers.test1.id = 'test1-container';
+    this.testEditorUI.appendChild(this.testTabContainers.test1);
+
+    // Test2 tab - placeholder
+    this.testTabContainers.test2.id = 'test2-container';
+    this.testTabContainers.test2.style.display = 'none';
+    this.testTabContainers.test2.innerHTML = '<h1>Test 2</h1><p>This is the Test 2 interface.</p>';
+    this.testEditorUI.appendChild(this.testTabContainers.test2);
+
+    // Test3 tab - placeholder
+    this.testTabContainers.test3.id = 'test3-container';
+    this.testTabContainers.test3.style.display = 'none';
+    this.testTabContainers.test3.innerHTML = '<h1>Test 3</h1><p>This is the Test 3 interface.</p>';
+    this.testEditorUI.appendChild(this.testTabContainers.test3);
+
+    // Initialize Test1 with ViewportController test
+    this.viewportControllerTest = null;
+    this.currentTestTab = 'test1';
+    this.setTestTab('test1');
+  }
+
+  setTestTab(tabName) {
+    this.currentTestTab = tabName;
+
+    // Update button states
+    [this.test1Btn, this.test2Btn, this.test3Btn].forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.testTab === tabName);
+    });
+
+    // Show/hide tab containers
+    Object.keys(this.testTabContainers).forEach(key => {
+      this.testTabContainers[key].style.display = key === tabName ? 'block' : 'none';
+    });
+
+    // Initialize Test1 if needed
+    if (tabName === 'test1' && !this.viewportControllerTest) {
+      this.viewportControllerTest = new ViewportControllerTest(this.testTabContainers.test1);
+    }
   }
 
   createMainToolbar() {
