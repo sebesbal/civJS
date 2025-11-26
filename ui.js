@@ -2,6 +2,7 @@
 import { MapEditorUI } from './map-editor/map-editor-ui.js';
 import { EconomyEditorUI } from './economy-editor/economy-editor-ui.js';
 import { ViewportControllerTest } from './test/viewport-controller-test.js';
+import { ObjectSceneTest } from './test/object-scene-test.js';
 
 export class UIManager {
   constructor() {
@@ -65,8 +66,8 @@ export class UIManager {
 
     this.test2Btn = document.createElement('button');
     this.test2Btn.className = 'toolbar-item test-toolbar-item';
-    this.test2Btn.textContent = 'Test2';
-    this.test2Btn.title = 'Test2';
+    this.test2Btn.textContent = 'ObjectScene';
+    this.test2Btn.title = 'Object Scene Test';
     this.test2Btn.dataset.testTab = 'test2';
     this.test2Btn.addEventListener('click', () => this.setTestTab('test2'));
     this.testToolbar.appendChild(this.test2Btn);
@@ -106,10 +107,11 @@ export class UIManager {
     this.testTabContainers.test1.style.minHeight = '0';
     this.testEditorUI.appendChild(this.testTabContainers.test1);
 
-    // Test2 tab - placeholder
+    // Test2 tab - Object Scene Test
     this.testTabContainers.test2.id = 'test2-container';
     this.testTabContainers.test2.style.display = 'none';
-    this.testTabContainers.test2.innerHTML = '<h1>Test 2</h1><p>This is the Test 2 interface.</p>';
+    this.testTabContainers.test2.style.height = '100%';
+    this.testTabContainers.test2.style.minHeight = '0';
     this.testEditorUI.appendChild(this.testTabContainers.test2);
 
     // Test3 tab - placeholder
@@ -118,8 +120,9 @@ export class UIManager {
     this.testTabContainers.test3.innerHTML = '<h1>Test 3</h1><p>This is the Test 3 interface.</p>';
     this.testEditorUI.appendChild(this.testTabContainers.test3);
 
-    // Initialize Test1 with ViewportController test
+    // Initialize tests
     this.viewportControllerTest = null;
+    this.objectSceneTest = null;
     // Load saved test tab from localStorage, default to 'test1'
     const savedTestTab = localStorage.getItem('lastTestTab') || 'test1';
     this.currentTestTab = savedTestTab;
@@ -142,9 +145,12 @@ export class UIManager {
       this.testTabContainers[key].style.display = key === tabName ? 'block' : 'none';
     });
 
-    // Initialize Test1 if needed
+    // Initialize tests if needed
     if (tabName === 'test1' && !this.viewportControllerTest) {
       this.viewportControllerTest = new ViewportControllerTest(this.testTabContainers.test1);
+    }
+    if (tabName === 'test2' && !this.objectSceneTest) {
+      this.objectSceneTest = new ObjectSceneTest(this.testTabContainers.test2);
     }
   }
 
