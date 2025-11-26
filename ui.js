@@ -8,6 +8,7 @@ export class UIManager {
     this.mapEditorUI = null;
     this.economyEditorUI = null;
     this.testEditorUI = null;
+    this.testToolbar = null;
     // Load saved mode from localStorage, default to 'MAP_EDITOR'
     const savedMode = localStorage.getItem('lastEditorMode') || 'MAP_EDITOR';
     this.currentEditorMode = savedMode; // 'MAP_EDITOR', 'ECONOMY_EDITOR', or 'TEST_EDITOR'
@@ -31,14 +32,53 @@ export class UIManager {
   }
 
   createTestEditorUI() {
+    // Create test toolbar (menubar)
+    this.testToolbar = document.createElement('div');
+    this.testToolbar.id = 'test-toolbar';
+    this.testToolbar.style.position = 'fixed';
+    this.testToolbar.style.left = '60px';
+    this.testToolbar.style.top = '0';
+    this.testToolbar.style.width = '60px';
+    this.testToolbar.style.height = '100vh';
+    this.testToolbar.style.background = 'rgba(20, 20, 20, 0.95)';
+    this.testToolbar.style.backdropFilter = 'blur(10px)';
+    this.testToolbar.style.color = '#ffffff';
+    this.testToolbar.style.padding = '10px 0';
+    this.testToolbar.style.zIndex = '2000';
+    this.testToolbar.style.boxShadow = '2px 0 10px rgba(0, 0, 0, 0.3)';
+    this.testToolbar.style.display = 'none';
+    this.testToolbar.style.flexDirection = 'column';
+    this.testToolbar.style.alignItems = 'center';
+    this.testToolbar.style.gap = '10px';
+    document.body.appendChild(this.testToolbar);
+
+    // Create toolbar items
+    const test1Btn = document.createElement('button');
+    test1Btn.className = 'toolbar-item';
+    test1Btn.textContent = 'Test1';
+    test1Btn.title = 'Test1';
+    this.testToolbar.appendChild(test1Btn);
+
+    const test2Btn = document.createElement('button');
+    test2Btn.className = 'toolbar-item';
+    test2Btn.textContent = 'Test2';
+    test2Btn.title = 'Test2';
+    this.testToolbar.appendChild(test2Btn);
+
+    const test3Btn = document.createElement('button');
+    test3Btn.className = 'toolbar-item';
+    test3Btn.textContent = 'Test3';
+    test3Btn.title = 'Test3';
+    this.testToolbar.appendChild(test3Btn);
+
     // Create a simple test editor UI container
     this.testEditorUI = document.createElement('div');
     this.testEditorUI.id = 'test-editor-ui';
     this.testEditorUI.style.display = 'none';
     this.testEditorUI.style.position = 'fixed';
     this.testEditorUI.style.top = '0';
-    this.testEditorUI.style.left = '60px';
-    this.testEditorUI.style.width = 'calc(100% - 60px)';
+    this.testEditorUI.style.left = '120px'; // Account for both toolbars
+    this.testEditorUI.style.width = 'calc(100% - 120px)';
     this.testEditorUI.style.height = '100vh';
     this.testEditorUI.style.background = '#1a1a1a';
     this.testEditorUI.style.color = '#ffffff';
@@ -98,6 +138,9 @@ export class UIManager {
       if (this.testEditorUI) {
         this.testEditorUI.style.display = 'none';
       }
+      if (this.testToolbar) {
+        this.testToolbar.style.display = 'none';
+      }
       // Show the map renderer
       if (this.renderer) {
         this.renderer.domElement.style.display = 'block';
@@ -108,6 +151,9 @@ export class UIManager {
       if (this.testEditorUI) {
         this.testEditorUI.style.display = 'none';
       }
+      if (this.testToolbar) {
+        this.testToolbar.style.display = 'none';
+      }
       // Hide the map renderer
       if (this.renderer) {
         this.renderer.domElement.style.display = 'none';
@@ -117,6 +163,9 @@ export class UIManager {
       this.economyEditorUI.hide();
       if (this.testEditorUI) {
         this.testEditorUI.style.display = 'block';
+      }
+      if (this.testToolbar) {
+        this.testToolbar.style.display = 'flex';
       }
       // Hide the map renderer
       if (this.renderer) {
