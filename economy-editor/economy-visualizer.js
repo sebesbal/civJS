@@ -341,7 +341,9 @@ export class EconomyVisualizer {
     
     // Fixed view size at startup
     const fixedViewSize = 20;
-    const aspect = this.renderer.domElement.width / this.renderer.domElement.height || 1;
+    const rendererWidth = this.renderer.domElement.width;
+    const rendererHeight = this.renderer.domElement.height;
+    const aspect = rendererWidth / rendererHeight || 1;
     
     this.camera.left = -fixedViewSize * aspect;
     this.camera.right = fixedViewSize * aspect;

@@ -63,6 +63,15 @@ export class EconomyEditorUI {
     } catch (err) {
       console.error('Error initializing visualizer:', err);
     }
+    
+    // After visualization is set up, recalculate zoom constraints
+    // This is needed when the Eco tab is selected on page load
+    // (show() was called before the economy was loaded, so constraints weren't applied)
+    this.calculatedMaxZoom = null;
+    this.calculateMaxZoom();
+    this.constrainCameraToGraphBounds();
+    // Call handleResize to update camera with corrected zoom
+    this.handleResize();
   }
 
   // Load default economy file
