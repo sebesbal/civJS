@@ -7,6 +7,10 @@
  * - Zoom constraints based on content bounds
  * - Proper resize handling with timing fixes for tab-based UIs
  * 
+ * Zoom behavior options:
+ * - allowZoomOutBeyondContent: false (default) - viewport stays inside content bounds
+ * - allowZoomOutBeyondContent: true - content fits in viewport at max zoom (with blank space)
+ * 
  * Subclasses must implement:
  * - getContentBoundingBox(): { minX, maxX, minY, maxY }
  * - hasContent(): boolean
@@ -33,6 +37,10 @@ export class OrthographicViewerBase {
     this.currentZoom = 20;
     this.calculatedMaxZoom = null;
     
+    // Zoom behavior: when true, allows zooming out so content fits in view (with blank space)
+    // When false (default), viewport is constrained to stay within content bounds
+    this.allowZoomOutBeyondContent = false;
+    
     // Initialization state
     this._animationStarted = false;
   }
@@ -45,18 +53,23 @@ export class OrthographicViewerBase {
    * @param {number} options.minZoom - Minimum zoom level (default: 2)
    * @param {number} options.maxZoom - Maximum zoom level (default: 1000)
    * @param {number} options.backgroundColor - Background color (default: 0x1a1a1a)
+   * @param {boolean} options.allowZoomOutBeyondContent - When true, allows zooming out so content
+   *   fits in the viewport with blank space around it. When false (default), the viewport is
+   *   constrained to stay within content bounds.
    */
   initializeThreeJS(options = {}) {
     const {
       initialZoom = 20,
       minZoom = 2,
       maxZoom = 1000,
-      backgroundColor = 0x1a1a1a
+      backgroundColor = 0x1a1a1a,
+      allowZoomOutBeyondContent = true
     } = options;
 
     this.currentZoom = initialZoom;
     this.minZoom = minZoom;
     this.maxZoom = maxZoom;
+    this.allowZoomOutBeyondContent = allowZoomOutBeyondContent;
 
     // Create scene
     this.scene = new THREE.Scene();
@@ -166,9 +179,9 @@ export class OrthographicViewerBase {
         this.calculateMaxZoom();
       }
 
-      // Clamp zoom to limits
-      const maxZoom = this.calculatedMaxZoom || this.maxZoom;
-      newZoom = Math.max(this.minZoom, Math.min(maxZoom, newZoom));
+      // Clamp zoom to limits (calculatedMaxZoom accounts for allowZoomOutBeyondContent mode)
+      const effectiveMaxZoom = this.calculatedMaxZoom || this.maxZoom;
+      newZoom = Math.max(this.minZoom, Math.min(effectiveMaxZoom, newZoom));
 
       if (newZoom !== this.currentZoom) {
         this.currentZoom = newZoom;
@@ -240,6 +253,11 @@ export class OrthographicViewerBase {
 
   /**
    * Calculate the maximum zoom level based on content bounds.
+   * 
+   * When allowZoomOutBeyondContent is false:
+   *   Max zoom = viewport fits inside content (no blank space)
+   * When allowZoomOutBeyondContent is true:
+   *   Max zoom = content fits inside viewport (blank space on one axis due to aspect ratio)
    */
   calculateMaxZoom() {
     if (!this.hasContent()) {
@@ -248,25 +266,32 @@ export class OrthographicViewerBase {
     }
 
     const bbox = this.getContentBoundingBox();
-    const width = bbox.maxX - bbox.minX;
-    const height = bbox.maxY - bbox.minY;
-    const maxDim = Math.max(width, height);
+    const contentWidth = bbox.maxX - bbox.minX;
+    const contentHeight = bbox.maxY - bbox.minY;
 
-    if (maxDim === 0) {
+    if (contentWidth === 0 || contentHeight === 0) {
       this.calculatedMaxZoom = 100;
       return;
     }
 
-    // Calculate view size to fit the content with padding
     const padding = 2;
     const rect = this.renderer.domElement.getBoundingClientRect();
     const aspect = rect.width / rect.height || 1;
 
+    // Calculate viewSize needed to fit content in each dimension
+    // viewSize is half the viewport height, so:
+    // - To fit content width: viewSize * aspect = (contentWidth + padding) / 2
+    // - To fit content height: viewSize = (contentHeight + padding) / 2
+    const viewSizeForWidth = (contentWidth + padding * 2) / (2 * aspect);
+    const viewSizeForHeight = (contentHeight + padding * 2) / 2;
+
     let viewSize;
-    if (width / height > aspect) {
-      viewSize = (maxDim / 2) + padding;
+    if (this.allowZoomOutBeyondContent) {
+      // Content fits inside viewport - use the larger viewSize (content touches one edge)
+      viewSize = Math.max(viewSizeForWidth, viewSizeForHeight);
     } else {
-      viewSize = ((maxDim / 2) + padding) / aspect;
+      // Viewport fits inside content - use the smaller viewSize (viewport touches one edge)
+      viewSize = Math.min(viewSizeForWidth, viewSizeForHeight);
     }
 
     viewSize = Math.max(this.minZoom, viewSize);
@@ -274,7 +299,16 @@ export class OrthographicViewerBase {
   }
 
   /**
-   * Constrain camera so viewport always stays within content bounds.
+   * Constrain camera based on zoom mode.
+   * 
+   * When allowZoomOutBeyondContent is false (default):
+   *   - Viewport stays within content bounds
+   *   - At max zoom, viewport edges touch content edges
+   * 
+   * When allowZoomOutBeyondContent is true:
+   *   - Content fits inside viewport at max zoom (with blank space)
+   *   - Camera is centered when content is smaller than viewport
+   *   - Panning is allowed so content edge can reach viewport edge
    */
   constrainCameraToContentBounds() {
     if (!this.camera || !this.renderer || !this.hasContent()) {
@@ -292,12 +326,6 @@ export class OrthographicViewerBase {
     const viewportHalfWidth = viewSize * aspect;
     const viewportHalfHeight = viewSize;
 
-    // Current viewport bounds
-    const viewportLeft = this.camera.position.x - viewportHalfWidth;
-    const viewportRight = this.camera.position.x + viewportHalfWidth;
-    const viewportBottom = this.camera.position.y - viewportHalfHeight;
-    const viewportTop = this.camera.position.y + viewportHalfHeight;
-
     // Content bounds with padding
     const nodePadding = 1.5;
     const contentLeft = contentBbox.minX - nodePadding;
@@ -305,37 +333,91 @@ export class OrthographicViewerBase {
     const contentBottom = contentBbox.minY - nodePadding;
     const contentTop = contentBbox.maxY + nodePadding;
 
-    // Clamp camera position so viewport stays within content bounds
-    let newCameraX = this.camera.position.x;
-    let newCameraY = this.camera.position.y;
-
-    // Constrain horizontally
-    if (viewportRight > contentRight) {
-      newCameraX = contentRight - viewportHalfWidth;
-    }
-    if (viewportLeft < contentLeft) {
-      newCameraX = contentLeft + viewportHalfWidth;
-    }
-
-    // Constrain vertically
-    if (viewportTop > contentTop) {
-      newCameraY = contentTop - viewportHalfHeight;
-    }
-    if (viewportBottom < contentBottom) {
-      newCameraY = contentBottom + viewportHalfHeight;
-    }
-
-    // If viewport is larger than content, center it
-    const viewportWidth = viewportRight - viewportLeft;
-    const viewportHeight = viewportTop - viewportBottom;
+    const viewportWidth = viewportHalfWidth * 2;
+    const viewportHeight = viewportHalfHeight * 2;
     const contentWidth = contentRight - contentLeft;
     const contentHeight = contentTop - contentBottom;
 
-    if (viewportWidth > contentWidth) {
-      newCameraX = (contentLeft + contentRight) / 2;
-    }
-    if (viewportHeight > contentHeight) {
-      newCameraY = (contentBottom + contentTop) / 2;
+    let newCameraX = this.camera.position.x;
+    let newCameraY = this.camera.position.y;
+
+    if (this.allowZoomOutBeyondContent) {
+      // Mode: content fits in viewport (with possible blank space)
+      
+      // If viewport is larger than content in a dimension, center on that axis
+      // Otherwise, constrain so content edge can reach viewport edge but not go past
+      
+      if (viewportWidth >= contentWidth) {
+        // Viewport wider than content - center horizontally
+        newCameraX = (contentLeft + contentRight) / 2;
+      } else {
+        // Content wider than viewport - constrain so viewport stays within content
+        const minCameraX = contentLeft + viewportHalfWidth;
+        const maxCameraX = contentRight - viewportHalfWidth;
+        newCameraX = Math.max(minCameraX, Math.min(maxCameraX, newCameraX));
+      }
+      
+      if (viewportHeight >= contentHeight) {
+        // Viewport taller than content - center vertically
+        newCameraY = (contentBottom + contentTop) / 2;
+      } else {
+        // Content taller than viewport - constrain so viewport stays within content
+        const minCameraY = contentBottom + viewportHalfHeight;
+        const maxCameraY = contentTop - viewportHalfHeight;
+        newCameraY = Math.max(minCameraY, Math.min(maxCameraY, newCameraY));
+      }
+      
+      // No zoom constraint in this mode - user can zoom out freely up to maxZoom
+      
+    } else {
+      // Mode: viewport stays within content bounds (original behavior)
+      
+      // Current viewport bounds
+      const viewportLeft = this.camera.position.x - viewportHalfWidth;
+      const viewportRight = this.camera.position.x + viewportHalfWidth;
+      const viewportBottom = this.camera.position.y - viewportHalfHeight;
+      const viewportTop = this.camera.position.y + viewportHalfHeight;
+
+      // Constrain horizontally
+      if (viewportRight > contentRight) {
+        newCameraX = contentRight - viewportHalfWidth;
+      }
+      if (viewportLeft < contentLeft) {
+        newCameraX = contentLeft + viewportHalfWidth;
+      }
+
+      // Constrain vertically
+      if (viewportTop > contentTop) {
+        newCameraY = contentTop - viewportHalfHeight;
+      }
+      if (viewportBottom < contentBottom) {
+        newCameraY = contentBottom + viewportHalfHeight;
+      }
+
+      // If viewport is larger than content, center it
+      if (viewportWidth > contentWidth) {
+        newCameraX = (contentLeft + contentRight) / 2;
+      }
+      if (viewportHeight > contentHeight) {
+        newCameraY = (contentBottom + contentTop) / 2;
+      }
+
+      // Constrain zoom - ensure zoom doesn't allow viewport to exceed content bounds
+      const maxZoomForContent = Math.min(
+        contentWidth / (2 * aspect),
+        contentHeight / 2
+      );
+
+      // If current zoom is too large (viewport too large), reduce it
+      if (this.currentZoom > maxZoomForContent) {
+        this.currentZoom = maxZoomForContent;
+        if (this.calculatedMaxZoom === null || this.currentZoom > this.calculatedMaxZoom) {
+          this.calculatedMaxZoom = this.currentZoom;
+        }
+        this.updateCameraViewSize();
+        this.constrainCameraToContentBounds();
+        return; // Early return since we're recursing
+      }
     }
 
     // Update camera position if it changed
@@ -343,22 +425,6 @@ export class OrthographicViewerBase {
       this.camera.position.x = newCameraX;
       this.camera.position.y = newCameraY;
       this.camera.lookAt(newCameraX, newCameraY, 0);
-    }
-
-    // Also constrain zoom - ensure zoom doesn't allow viewport to exceed content bounds
-    const maxZoomForContent = Math.min(
-      contentWidth / (2 * aspect),
-      contentHeight / 2
-    );
-
-    // If current zoom is too large (viewport too large), reduce it
-    if (this.currentZoom > maxZoomForContent) {
-      this.currentZoom = maxZoomForContent;
-      if (this.calculatedMaxZoom === null || this.currentZoom > this.calculatedMaxZoom) {
-        this.calculatedMaxZoom = this.currentZoom;
-      }
-      this.updateCameraViewSize();
-      this.constrainCameraToContentBounds();
     }
   }
 
