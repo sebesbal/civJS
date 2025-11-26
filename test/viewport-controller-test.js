@@ -9,9 +9,8 @@ export class ViewportControllerTest {
     this.isDragging = false;
     this.lastMousePos = { x: 0, y: 0 };
     
-    // Default rectangle sizes - viewport centered on canvas
-    // Canvas will be 600x400, so center viewport at (150, 100)
-    this.viewportRect = { x: 150, y: 100, width: 300, height: 200 };
+    // Default rectangle sizes - will be initialized after canvas is sized
+    this.viewportRect = { x: 0, y: 0, width: 300, height: 200 };
     this.boundsRect = { x: 0, y: 0, width: 600, height: 400 };
     
     this.init();
@@ -21,6 +20,69 @@ export class ViewportControllerTest {
     this.createUI();
     this.setupViewportController();
     this.setupEventListeners();
+    this.draw();
+  }
+
+  resizeCanvas() {
+    if (!this.canvasContainer || !this.canvas) return;
+    
+    // Get the actual displayed size of the canvas element
+    const canvasRect = this.canvas.getBoundingClientRect();
+    let newWidth = Math.floor(canvasRect.width);
+    let newHeight = Math.floor(canvasRect.height);
+    
+    // If canvas hasn't been sized yet (first render), use container size minus padding
+    if (newWidth < 50 || newHeight < 50) {
+      const containerRect = this.canvasContainer.getBoundingClientRect();
+      const padding = 20; // 10px padding on each side
+      newWidth = Math.max(100, Math.floor(containerRect.width - padding));
+      newHeight = Math.max(100, Math.floor(containerRect.height - padding));
+    }
+    
+    // Ensure minimum size
+    newWidth = Math.max(100, newWidth);
+    newHeight = Math.max(100, newHeight);
+    
+    // Update canvas internal size to match display size for crisp rendering
+    this.canvas.width = newWidth;
+    this.canvas.height = newHeight;
+    
+    // Update boundsRect to match new canvas size
+    this.boundsRect = { 
+      x: 0, 
+      y: 0, 
+      width: newWidth, 
+      height: newHeight 
+    };
+    
+    // Center viewport on canvas if this is the first resize
+    if (!this.viewportController || this.viewportRect.width === 300) {
+      this.viewportRect = {
+        x: (newWidth - 300) / 2,
+        y: (newHeight - 200) / 2,
+        width: 300,
+        height: 200
+      };
+    }
+    
+    // Update viewport controller if it exists
+    if (this.viewportController) {
+      this.viewportController.setBoundsRect({ ...this.boundsRect });
+      this.viewportController.setViewportRect({ ...this.viewportRect });
+      
+      // Update inputs if they exist
+      if (document.getElementById('bounds-width')) {
+        this.updateBoundsInputs();
+      }
+      if (document.getElementById('viewport-x')) {
+        document.getElementById('viewport-x').value = Math.round(this.viewportRect.x * 100) / 100;
+        document.getElementById('viewport-y').value = Math.round(this.viewportRect.y * 100) / 100;
+        document.getElementById('viewport-width').value = Math.round(this.viewportRect.width * 100) / 100;
+        document.getElementById('viewport-height').value = Math.round(this.viewportRect.height * 100) / 100;
+      }
+    }
+    
+    // Redraw
     this.draw();
   }
 
@@ -115,19 +177,38 @@ export class ViewportControllerTest {
     canvasContainer.style.alignItems = 'center';
     canvasContainer.style.flex = '1';
     canvasContainer.style.minHeight = '0';
+    canvasContainer.style.overflow = 'hidden';
 
     this.canvas = document.createElement('canvas');
-    this.canvas.width = 600;
-    this.canvas.height = 400;
     this.canvas.style.cursor = 'grab';
     this.canvas.style.border = '1px solid rgba(255, 255, 255, 0.1)';
     this.canvas.style.borderRadius = '4px';
-    this.canvas.style.maxWidth = '100%';
-    this.canvas.style.maxHeight = '100%';
+    this.canvas.style.width = '100%';
+    this.canvas.style.height = '100%';
     this.ctx = this.canvas.getContext('2d');
 
     canvasContainer.appendChild(this.canvas);
     this.container.appendChild(canvasContainer);
+
+    // Store canvas container reference for resize handling
+    this.canvasContainer = canvasContainer;
+    
+    // Set up resize observer to update canvas size
+    this.resizeObserver = new ResizeObserver(() => {
+      this.resizeCanvas();
+    });
+    this.resizeObserver.observe(canvasContainer);
+    
+    // Also listen to window resize
+    this.windowResizeHandler = () => {
+      this.resizeCanvas();
+    };
+    window.addEventListener('resize', this.windowResizeHandler);
+    
+    // Initial resize - use requestAnimationFrame to ensure DOM is ready
+    requestAnimationFrame(() => {
+      this.resizeCanvas();
+    });
 
     // Instructions
     const instructions = document.createElement('div');
