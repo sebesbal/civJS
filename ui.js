@@ -7,7 +7,10 @@ export class UIManager {
     this.mainToolbar = null;
     this.mapEditorUI = null;
     this.economyEditorUI = null;
-    this.currentEditorMode = 'MAP_EDITOR'; // 'MAP_EDITOR' or 'ECONOMY_EDITOR'
+    this.testEditorUI = null;
+    // Load saved mode from localStorage, default to 'MAP_EDITOR'
+    const savedMode = localStorage.getItem('lastEditorMode') || 'MAP_EDITOR';
+    this.currentEditorMode = savedMode; // 'MAP_EDITOR', 'ECONOMY_EDITOR', or 'TEST_EDITOR'
     this.onEditorModeChange = null;
     this.renderer = null;
     this.init();
@@ -17,12 +20,31 @@ export class UIManager {
     this.createMainToolbar();
     this.mapEditorUI = new MapEditorUI();
     this.economyEditorUI = new EconomyEditorUI();
+    this.createTestEditorUI();
     this.setupEconomyEditorCallbacks();
-    this.setEditorMode('MAP_EDITOR');
+    // Set the saved mode (or default to MAP_EDITOR)
+    this.setEditorMode(this.currentEditorMode);
   }
 
   setupEconomyEditorCallbacks() {
     // Callbacks will be set via property setters
+  }
+
+  createTestEditorUI() {
+    // Create a simple test editor UI container
+    this.testEditorUI = document.createElement('div');
+    this.testEditorUI.id = 'test-editor-ui';
+    this.testEditorUI.style.display = 'none';
+    this.testEditorUI.style.position = 'fixed';
+    this.testEditorUI.style.top = '0';
+    this.testEditorUI.style.left = '60px';
+    this.testEditorUI.style.width = 'calc(100% - 60px)';
+    this.testEditorUI.style.height = '100vh';
+    this.testEditorUI.style.background = '#1a1a1a';
+    this.testEditorUI.style.color = '#ffffff';
+    this.testEditorUI.style.padding = '20px';
+    this.testEditorUI.innerHTML = '<h1>Test Editor</h1><p>This is the test editor interface.</p>';
+    document.body.appendChild(this.testEditorUI);
   }
 
   createMainToolbar() {
@@ -32,7 +54,7 @@ export class UIManager {
 
     // Map Editor button
     const mapEditorBtn = document.createElement('button');
-    mapEditorBtn.className = 'toolbar-item active';
+    mapEditorBtn.className = 'toolbar-item';
     mapEditorBtn.textContent = 'Map';
     mapEditorBtn.dataset.editorMode = 'MAP_EDITOR';
     mapEditorBtn.title = 'Map Editor';
@@ -47,10 +69,22 @@ export class UIManager {
     economyEditorBtn.title = 'Economy Editor';
     economyEditorBtn.addEventListener('click', () => this.setEditorMode('ECONOMY_EDITOR'));
     this.mainToolbar.appendChild(economyEditorBtn);
+
+    // Test Editor button
+    const testEditorBtn = document.createElement('button');
+    testEditorBtn.className = 'toolbar-item';
+    testEditorBtn.textContent = 'Test';
+    testEditorBtn.dataset.editorMode = 'TEST_EDITOR';
+    testEditorBtn.title = 'Test Editor';
+    testEditorBtn.addEventListener('click', () => this.setEditorMode('TEST_EDITOR'));
+    this.mainToolbar.appendChild(testEditorBtn);
   }
 
   setEditorMode(mode) {
     this.currentEditorMode = mode;
+    
+    // Save the selected mode to localStorage
+    localStorage.setItem('lastEditorMode', mode);
 
     // Update toolbar button states
     document.querySelectorAll('.toolbar-item').forEach(btn => {
@@ -61,13 +95,29 @@ export class UIManager {
     if (mode === 'MAP_EDITOR') {
       this.mapEditorUI.show();
       this.economyEditorUI.hide();
+      if (this.testEditorUI) {
+        this.testEditorUI.style.display = 'none';
+      }
       // Show the map renderer
       if (this.renderer) {
         this.renderer.domElement.style.display = 'block';
       }
-    } else {
+    } else if (mode === 'ECONOMY_EDITOR') {
       this.mapEditorUI.hide();
       this.economyEditorUI.show();
+      if (this.testEditorUI) {
+        this.testEditorUI.style.display = 'none';
+      }
+      // Hide the map renderer
+      if (this.renderer) {
+        this.renderer.domElement.style.display = 'none';
+      }
+    } else if (mode === 'TEST_EDITOR') {
+      this.mapEditorUI.hide();
+      this.economyEditorUI.hide();
+      if (this.testEditorUI) {
+        this.testEditorUI.style.display = 'block';
+      }
       // Hide the map renderer
       if (this.renderer) {
         this.renderer.domElement.style.display = 'none';
