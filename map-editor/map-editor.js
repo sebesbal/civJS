@@ -2,33 +2,32 @@ import * as THREE from 'three';
 import { ObjectManager } from './objects.js';
 
 export class MapEditor {
-  constructor(scene, camera, renderer, tiles, mapConfig = null, routeManager = null) {
+  constructor(scene, camera, renderer, tiles, mapConfig = null, routeManager) {
     this.scene = scene;
     this.camera = camera;
     this.renderer = renderer;
     this.tiles = tiles; // Array of tile meshes
     this.routeManager = routeManager;
-    
+
     this.objectManager = new ObjectManager(scene);
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
-    
+
     this.mode = 'VIEW';
     this.selectedObjectType = null;
     this.isRouteMode = false;
-    
+
     // Dragging state
     this.isDraggingObject = false;
     this.dragStartPosition = null;
     this.dragObject = null;
-    
+
     // Tile grid info (from mapConfig or calculated from tiles)
     if (mapConfig) {
       this.tileSize = mapConfig.tileSize || 1;
       this.mapSize = mapConfig.mapSize || 20;
     } else {
       // Calculate from tiles if mapConfig not provided
-      // Find the maximum grid coordinates from tile userData
       let maxX = 0;
       let maxZ = 0;
       tiles.forEach(tile => {
@@ -38,29 +37,19 @@ export class MapEditor {
         }
       });
       this.mapSize = Math.max(maxX, maxZ) + 1;
-      // Calculate tileSize from first tile's position
       if (tiles.length > 0) {
         const firstTile = tiles[0];
-        const secondTile = tiles.find(t => 
+        const secondTile = tiles.find(t =>
           t.userData && t.userData.gridX === 1 && t.userData.gridZ === 0
         );
-        if (secondTile) {
-          this.tileSize = Math.abs(secondTile.position.x - firstTile.position.x);
-        } else {
-          this.tileSize = 1;
-        }
+        this.tileSize = secondTile
+          ? Math.abs(secondTile.position.x - firstTile.position.x)
+          : 1;
       } else {
         this.tileSize = 1;
       }
     }
     this.tileOffset = (this.mapSize * this.tileSize) / 2 - this.tileSize / 2;
-    
-    this.setupEventListeners();
-  }
-
-  setupEventListeners() {
-    // Mouse events will be handled by the main index.js
-    // This class provides methods for handling interactions
   }
 
   setMode(mode) {
@@ -68,10 +57,7 @@ export class MapEditor {
     if (mode === 'VIEW') {
       this.objectManager.deselectObject();
       this.selectedObjectType = null;
-      // Deselect routes when switching to VIEW mode
-      if (this.routeManager) {
-        this.routeManager.deselectRoute();
-      }
+      this.routeManager.deselectRoute();
     }
   }
 
@@ -81,9 +67,6 @@ export class MapEditor {
 
   setRouteMode(enabled) {
     this.isRouteMode = enabled;
-    if (!enabled) {
-      // Clear any route creation state
-    }
   }
 
   // Convert mouse coordinates to normalized device coordinates
@@ -97,15 +80,13 @@ export class MapEditor {
   worldToTilePosition(worldPos) {
     const x = Math.round((worldPos.x + this.tileOffset) / this.tileSize);
     const z = Math.round((worldPos.z + this.tileOffset) / this.tileSize);
-    
-    // Clamp to map bounds
+
     const clampedX = Math.max(0, Math.min(this.mapSize - 1, x));
     const clampedZ = Math.max(0, Math.min(this.mapSize - 1, z));
-    
-    // Convert back to world position (tile center)
+
     const tileWorldX = clampedX * this.tileSize - this.tileOffset;
     const tileWorldZ = clampedZ * this.tileSize - this.tileOffset;
-    
+
     return new THREE.Vector3(tileWorldX, 0, tileWorldZ);
   }
 
@@ -120,11 +101,11 @@ export class MapEditor {
   raycast(event) {
     this.updateMousePosition(event);
     this.raycaster.setFromCamera(this.mouse, this.camera);
-    
+
     // Check objects first
     const objects = this.objectManager.getAllObjects().map(obj => obj.mesh);
     const objectIntersects = this.raycaster.intersectObjects(objects);
-    
+
     if (objectIntersects.length > 0) {
       const hitMesh = objectIntersects[0].object;
       const objectData = this.objectManager.getAllObjects().find(obj => obj.mesh === hitMesh);
@@ -136,12 +117,12 @@ export class MapEditor {
         };
       }
     }
-    
-    // Check routes if routeManager is available
-    if (this.routeManager && !this.routeManager.isInRouteCreationMode()) {
+
+    // Check routes
+    if (!this.routeManager.isInRouteCreationMode()) {
       const routeMeshes = this.routeManager.getAllRouteMeshes();
       const routeIntersects = this.raycaster.intersectObjects(routeMeshes);
-      
+
       if (routeIntersects.length > 0) {
         const hitMesh = routeIntersects[0].object;
         const route = this.routeManager.findRouteByMesh(hitMesh);
@@ -154,10 +135,10 @@ export class MapEditor {
         }
       }
     }
-    
+
     // Check tiles
     const tileIntersects = this.raycaster.intersectObjects(this.tiles);
-    
+
     if (tileIntersects.length > 0) {
       const intersection = tileIntersects[0];
       const tilePos = this.worldToTilePosition(intersection.point);
@@ -167,43 +148,31 @@ export class MapEditor {
         position: tilePos
       };
     }
-    
+
     return null;
   }
 
   handleMouseDown(event) {
     if (this.mode === 'VIEW' && !this.isRouteMode) {
-      // Deselect routes when clicking in VIEW mode
-      if (this.routeManager) {
-        this.routeManager.deselectRoute();
-      }
+      this.routeManager.deselectRoute();
       return false; // Let camera handle it
     }
 
     const result = this.raycast(event);
     if (!result) {
-      // Clicked on empty space - deselect everything
-      if (this.routeManager) {
-        this.routeManager.deselectRoute();
-      }
+      this.routeManager.deselectRoute();
       this.objectManager.deselectObject();
       return false;
     }
 
     if (this.isRouteMode) {
-      // Route creation is handled by routes.js
       return false;
     }
 
     if (result.type === 'object') {
-      // Deselect route if selecting object
-      if (this.routeManager) {
-        this.routeManager.deselectRoute();
-      }
-      // Select object
+      this.routeManager.deselectRoute();
       this.objectManager.selectObject(result.object.id);
-      
-      // Start dragging if in edit mode
+
       if (this.mode === 'EDIT') {
         this.isDraggingObject = true;
         this.dragObject = result.object;
@@ -211,29 +180,21 @@ export class MapEditor {
       }
       return true;
     } else if (result.type === 'route') {
-      // Deselect object if selecting route
       this.objectManager.deselectObject();
-      // Select route
-      if (this.routeManager) {
-        this.routeManager.selectRoute(result.route.id);
-      }
+      this.routeManager.selectRoute(result.route.id);
       return true;
     } else if (result.type === 'tile') {
       if (this.selectedObjectType) {
-        // Place object on tile
         const tileTopY = this.getTileTopSurfaceFromResult(result);
         if (tileTopY === null) return false;
-        
+
         const position = result.position.clone();
         position.y = tileTopY;
-        
+
         this.objectManager.createObject(this.selectedObjectType, position);
         return true;
       } else {
-        // Clicked on empty tile - deselect everything
-        if (this.routeManager) {
-          this.routeManager.deselectRoute();
-        }
+        this.routeManager.deselectRoute();
         this.objectManager.deselectObject();
         return false;
       }
@@ -248,10 +209,10 @@ export class MapEditor {
       if (result && result.type === 'tile') {
         const tileTopY = this.getTileTopSurfaceFromResult(result);
         if (tileTopY === null) return;
-        
+
         const position = result.position.clone();
         position.y = tileTopY;
-        
+
         this.objectManager.moveObject(this.dragObject.id, position);
       }
     }
@@ -272,10 +233,8 @@ export class MapEditor {
 
     const result = this.raycast(event);
     if (result && result.type === 'object') {
-      // Show properties panel (handled by UI)
       return result.object;
     } else if (result && result.type === 'route') {
-      // Show route properties panel
       return result.route;
     }
 
@@ -283,8 +242,8 @@ export class MapEditor {
   }
 
   deleteSelectedRoute() {
-    if (this.routeManager && this.routeManager.getSelectedRoute()) {
-      const route = this.routeManager.getSelectedRoute();
+    const route = this.routeManager.getSelectedRoute();
+    if (route) {
       return this.routeManager.removeRoute(route.id);
     }
     return false;
@@ -302,4 +261,3 @@ export class MapEditor {
     return this.objectManager.removeObject(objectId);
   }
 }
-

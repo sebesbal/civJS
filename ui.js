@@ -16,7 +16,40 @@ export class UIManager {
     this.currentEditorMode = savedMode; // 'MAP_EDITOR', 'ECONOMY_EDITOR', or 'TEST_EDITOR'
     this.onEditorModeChange = null;
     this.renderer = null;
+
+    // Define forwarded callback properties dynamically
+    this._setupCallbackForwarding([
+      { name: 'onModeChange', target: 'mapEditorUI' },
+      { name: 'onObjectTypeSelect', target: 'mapEditorUI' },
+      { name: 'onRouteModeToggle', target: 'mapEditorUI' },
+      { name: 'onObjectDelete', target: 'mapEditorUI' },
+      { name: 'onRouteDelete', target: 'mapEditorUI' },
+      { name: 'onSaveGame', target: 'mapEditorUI' },
+      { name: 'onLoadGame', target: 'mapEditorUI' },
+      { name: 'onSaveEconomy', target: 'economyEditorUI' },
+      { name: 'onLoadEconomy', target: 'economyEditorUI' },
+    ]);
+
     this.init();
+  }
+
+  _setupCallbackForwarding(callbacks) {
+    for (const { name, target } of callbacks) {
+      const privateName = `_${name}`;
+      Object.defineProperty(this, name, {
+        set(callback) {
+          this[privateName] = callback;
+          if (this[target]) {
+            this[target][name] = callback;
+          }
+        },
+        get() {
+          return this[privateName];
+        },
+        configurable: true,
+        enumerable: true,
+      });
+    }
   }
 
   init() {
@@ -24,13 +57,19 @@ export class UIManager {
     this.mapEditorUI = new MapEditorUI();
     this.economyEditorUI = new EconomyEditorUI();
     this.createTestEditorUI();
-    this.setupEconomyEditorCallbacks();
     // Set the saved mode (or default to MAP_EDITOR)
     this.setEditorMode(this.currentEditorMode);
   }
 
-  setupEconomyEditorCallbacks() {
-    // Callbacks will be set via property setters
+  _createButton(text, className, dataset, onClick, parent) {
+    const btn = document.createElement('button');
+    btn.className = className;
+    btn.textContent = text;
+    btn.title = text;
+    Object.assign(btn.dataset, dataset);
+    btn.addEventListener('click', onClick);
+    parent.appendChild(btn);
+    return btn;
   }
 
   createTestEditorUI() {
@@ -55,30 +94,23 @@ export class UIManager {
     this.testToolbar.style.gap = '10px';
     document.body.appendChild(this.testToolbar);
 
-    // Create toolbar items
-    this.test1Btn = document.createElement('button');
-    this.test1Btn.className = 'toolbar-item test-toolbar-item';
-    this.test1Btn.textContent = 'ViewportController';
-    this.test1Btn.title = 'ViewportController';
-    this.test1Btn.dataset.testTab = 'test1';
-    this.test1Btn.addEventListener('click', () => this.setTestTab('test1'));
-    this.testToolbar.appendChild(this.test1Btn);
+    // Create test tab buttons
+    const testTabs = [
+      { key: 'test1', label: 'ViewportController' },
+      { key: 'test2', label: 'ObjectScene' },
+      { key: 'test3', label: 'Test3' },
+    ];
 
-    this.test2Btn = document.createElement('button');
-    this.test2Btn.className = 'toolbar-item test-toolbar-item';
-    this.test2Btn.textContent = 'ObjectScene';
-    this.test2Btn.title = 'Object Scene Test';
-    this.test2Btn.dataset.testTab = 'test2';
-    this.test2Btn.addEventListener('click', () => this.setTestTab('test2'));
-    this.testToolbar.appendChild(this.test2Btn);
-
-    this.test3Btn = document.createElement('button');
-    this.test3Btn.className = 'toolbar-item test-toolbar-item';
-    this.test3Btn.textContent = 'Test3';
-    this.test3Btn.title = 'Test3';
-    this.test3Btn.dataset.testTab = 'test3';
-    this.test3Btn.addEventListener('click', () => this.setTestTab('test3'));
-    this.testToolbar.appendChild(this.test3Btn);
+    this.testButtons = {};
+    for (const tab of testTabs) {
+      this.testButtons[tab.key] = this._createButton(
+        tab.label,
+        'toolbar-item test-toolbar-item',
+        { testTab: tab.key },
+        () => this.setTestTab(tab.key),
+        this.testToolbar
+      );
+    }
 
     // Create test editor UI container with tabs
     this.testEditorUI = document.createElement('div');
@@ -86,7 +118,7 @@ export class UIManager {
     this.testEditorUI.style.display = 'none';
     this.testEditorUI.style.position = 'fixed';
     this.testEditorUI.style.top = '0';
-    this.testEditorUI.style.left = '200px'; // Account for main toolbar (60px) + test toolbar (auto, ~140px)
+    this.testEditorUI.style.left = '200px';
     this.testEditorUI.style.width = 'calc(100% - 200px)';
     this.testEditorUI.style.height = '100vh';
     this.testEditorUI.style.background = '#1a1a1a';
@@ -95,30 +127,21 @@ export class UIManager {
     document.body.appendChild(this.testEditorUI);
 
     // Create tab containers
-    this.testTabContainers = {
-      test1: document.createElement('div'),
-      test2: document.createElement('div'),
-      test3: document.createElement('div')
-    };
-
-    // Test1 tab - ViewportController test
-    this.testTabContainers.test1.id = 'test1-container';
-    this.testTabContainers.test1.style.height = '100%';
-    this.testTabContainers.test1.style.minHeight = '0';
-    this.testEditorUI.appendChild(this.testTabContainers.test1);
-
-    // Test2 tab - Object Scene Test
-    this.testTabContainers.test2.id = 'test2-container';
-    this.testTabContainers.test2.style.display = 'none';
-    this.testTabContainers.test2.style.height = '100%';
-    this.testTabContainers.test2.style.minHeight = '0';
-    this.testEditorUI.appendChild(this.testTabContainers.test2);
-
-    // Test3 tab - placeholder
-    this.testTabContainers.test3.id = 'test3-container';
-    this.testTabContainers.test3.style.display = 'none';
-    this.testTabContainers.test3.innerHTML = '<h1>Test 3</h1><p>This is the Test 3 interface.</p>';
-    this.testEditorUI.appendChild(this.testTabContainers.test3);
+    this.testTabContainers = {};
+    for (const tab of testTabs) {
+      const container = document.createElement('div');
+      container.id = `${tab.key}-container`;
+      container.style.height = '100%';
+      container.style.minHeight = '0';
+      if (tab.key !== 'test1') {
+        container.style.display = 'none';
+      }
+      if (tab.key === 'test3') {
+        container.innerHTML = '<h1>Test 3</h1><p>This is the Test 3 interface.</p>';
+      }
+      this.testEditorUI.appendChild(container);
+      this.testTabContainers[tab.key] = container;
+    }
 
     // Initialize tests
     this.viewportControllerTest = null;
@@ -131,19 +154,17 @@ export class UIManager {
 
   setTestTab(tabName) {
     this.currentTestTab = tabName;
-
-    // Save the selected test tab to localStorage
     localStorage.setItem('lastTestTab', tabName);
 
     // Update button states
-    [this.test1Btn, this.test2Btn, this.test3Btn].forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.testTab === tabName);
-    });
+    for (const [key, btn] of Object.entries(this.testButtons)) {
+      btn.classList.toggle('active', key === tabName);
+    }
 
     // Show/hide tab containers
-    Object.keys(this.testTabContainers).forEach(key => {
-      this.testTabContainers[key].style.display = key === tabName ? 'block' : 'none';
-    });
+    for (const [key, container] of Object.entries(this.testTabContainers)) {
+      container.style.display = key === tabName ? 'block' : 'none';
+    }
 
     // Initialize tests if needed
     if (tabName === 'test1' && !this.viewportControllerTest) {
@@ -159,38 +180,26 @@ export class UIManager {
     this.mainToolbar.id = 'main-toolbar';
     document.body.appendChild(this.mainToolbar);
 
-    // Map Editor button
-    const mapEditorBtn = document.createElement('button');
-    mapEditorBtn.className = 'toolbar-item';
-    mapEditorBtn.textContent = 'Map';
-    mapEditorBtn.dataset.editorMode = 'MAP_EDITOR';
-    mapEditorBtn.title = 'Map Editor';
-    mapEditorBtn.addEventListener('click', () => this.setEditorMode('MAP_EDITOR'));
-    this.mainToolbar.appendChild(mapEditorBtn);
+    const modes = [
+      { text: 'Map', mode: 'MAP_EDITOR', title: 'Map Editor' },
+      { text: 'Econ', mode: 'ECONOMY_EDITOR', title: 'Economy Editor' },
+      { text: 'Test', mode: 'TEST_EDITOR', title: 'Test Editor' },
+    ];
 
-    // Economy Editor button
-    const economyEditorBtn = document.createElement('button');
-    economyEditorBtn.className = 'toolbar-item';
-    economyEditorBtn.textContent = 'Econ';
-    economyEditorBtn.dataset.editorMode = 'ECONOMY_EDITOR';
-    economyEditorBtn.title = 'Economy Editor';
-    economyEditorBtn.addEventListener('click', () => this.setEditorMode('ECONOMY_EDITOR'));
-    this.mainToolbar.appendChild(economyEditorBtn);
-
-    // Test Editor button
-    const testEditorBtn = document.createElement('button');
-    testEditorBtn.className = 'toolbar-item';
-    testEditorBtn.textContent = 'Test';
-    testEditorBtn.dataset.editorMode = 'TEST_EDITOR';
-    testEditorBtn.title = 'Test Editor';
-    testEditorBtn.addEventListener('click', () => this.setEditorMode('TEST_EDITOR'));
-    this.mainToolbar.appendChild(testEditorBtn);
+    for (const { text, mode, title } of modes) {
+      const btn = this._createButton(
+        text,
+        'toolbar-item',
+        { editorMode: mode },
+        () => this.setEditorMode(mode),
+        this.mainToolbar
+      );
+      btn.title = title;
+    }
   }
 
   setEditorMode(mode) {
     this.currentEditorMode = mode;
-    
-    // Save the selected mode to localStorage
     localStorage.setItem('lastEditorMode', mode);
 
     // Update toolbar button states
@@ -199,53 +208,28 @@ export class UIManager {
     });
 
     // Show/hide UI elements based on editor mode
-    if (mode === 'MAP_EDITOR') {
-      this.mapEditorUI.show();
-      this.economyEditorUI.hide();
-      if (this.testEditorUI) {
-        this.testEditorUI.style.display = 'none';
-      }
-      if (this.testToolbar) {
-        this.testToolbar.style.display = 'none';
-      }
-      // Show the map renderer
-      if (this.renderer) {
-        this.renderer.domElement.style.display = 'block';
-      }
-    } else if (mode === 'ECONOMY_EDITOR') {
-      this.mapEditorUI.hide();
-      this.economyEditorUI.show();
-      if (this.testEditorUI) {
-        this.testEditorUI.style.display = 'none';
-      }
-      if (this.testToolbar) {
-        this.testToolbar.style.display = 'none';
-      }
-      // Hide the map renderer
-      if (this.renderer) {
-        this.renderer.domElement.style.display = 'none';
-      }
-    } else if (mode === 'TEST_EDITOR') {
-      this.mapEditorUI.hide();
-      this.economyEditorUI.hide();
-      if (this.testEditorUI) {
-        this.testEditorUI.style.display = 'block';
-      }
-      if (this.testToolbar) {
-        this.testToolbar.style.display = 'flex';
-      }
-      // Restore the saved test tab when switching to TEST_EDITOR
-      if (this.testTabContainers) {
-        const savedTestTab = localStorage.getItem('lastTestTab') || 'test1';
-        this.setTestTab(savedTestTab);
-      }
-      // Hide the map renderer
-      if (this.renderer) {
-        this.renderer.domElement.style.display = 'none';
-      }
+    const isMap = mode === 'MAP_EDITOR';
+    const isTest = mode === 'TEST_EDITOR';
+
+    isMap ? this.mapEditorUI.show() : this.mapEditorUI.hide();
+    mode === 'ECONOMY_EDITOR' ? this.economyEditorUI.show() : this.economyEditorUI.hide();
+
+    if (this.testEditorUI) {
+      this.testEditorUI.style.display = isTest ? 'block' : 'none';
+    }
+    if (this.testToolbar) {
+      this.testToolbar.style.display = isTest ? 'flex' : 'none';
+    }
+    if (this.renderer) {
+      this.renderer.domElement.style.display = isMap ? 'block' : 'none';
     }
 
-    // Notify listeners
+    // Restore the saved test tab when switching to TEST_EDITOR
+    if (isTest && this.testTabContainers) {
+      const savedTestTab = localStorage.getItem('lastTestTab') || 'test1';
+      this.setTestTab(savedTestTab);
+    }
+
     if (this.onEditorModeChange) {
       this.onEditorModeChange(mode);
     }
@@ -302,106 +286,5 @@ export class UIManager {
 
   getSelectedObjectType() {
     return this.mapEditorUI ? this.mapEditorUI.getSelectedObjectType() : null;
-  }
-
-  // Callback properties - automatically forward to map editor UI
-  set onModeChange(callback) {
-    this._onModeChange = callback;
-    if (this.mapEditorUI) {
-      this.mapEditorUI.onModeChange = callback;
-    }
-  }
-
-  get onModeChange() {
-    return this._onModeChange;
-  }
-
-  set onObjectTypeSelect(callback) {
-    this._onObjectTypeSelect = callback;
-    if (this.mapEditorUI) {
-      this.mapEditorUI.onObjectTypeSelect = callback;
-    }
-  }
-
-  get onObjectTypeSelect() {
-    return this._onObjectTypeSelect;
-  }
-
-  set onRouteModeToggle(callback) {
-    this._onRouteModeToggle = callback;
-    if (this.mapEditorUI) {
-      this.mapEditorUI.onRouteModeToggle = callback;
-    }
-  }
-
-  get onRouteModeToggle() {
-    return this._onRouteModeToggle;
-  }
-
-  set onObjectDelete(callback) {
-    this._onObjectDelete = callback;
-    if (this.mapEditorUI) {
-      this.mapEditorUI.onObjectDelete = callback;
-    }
-  }
-
-  get onObjectDelete() {
-    return this._onObjectDelete;
-  }
-
-  set onRouteDelete(callback) {
-    this._onRouteDelete = callback;
-    if (this.mapEditorUI) {
-      this.mapEditorUI.onRouteDelete = callback;
-    }
-  }
-
-  get onRouteDelete() {
-    return this._onRouteDelete;
-  }
-
-  set onSaveGame(callback) {
-    this._onSaveGame = callback;
-    if (this.mapEditorUI) {
-      this.mapEditorUI.onSaveGame = callback;
-    }
-  }
-
-  get onSaveGame() {
-    return this._onSaveGame;
-  }
-
-  set onLoadGame(callback) {
-    this._onLoadGame = callback;
-    if (this.mapEditorUI) {
-      this.mapEditorUI.onLoadGame = callback;
-    }
-  }
-
-  get onLoadGame() {
-    return this._onLoadGame;
-  }
-
-  // Economy editor callbacks
-  set onSaveEconomy(callback) {
-    this._onSaveEconomy = callback;
-    if (this.economyEditorUI) {
-      this.economyEditorUI.onSaveEconomy = callback;
-    }
-  }
-
-  get onSaveEconomy() {
-    return this._onSaveEconomy;
-  }
-
-  set onLoadEconomy(callback) {
-    this._onLoadEconomy = callback;
-    if (this.economyEditorUI) {
-      this.economyEditorUI.onLoadEconomy = callback;
-    }
-  }
-
-  get onLoadEconomy() {
-    return this._onLoadEconomy;
   }
 }

@@ -210,9 +210,4 @@ export class Tilemap {
   }
 }
 
-// Backward compatibility: export a function that creates a Tilemap
-export function createTilemap(scene, options = {}) {
-  const tilemap = new Tilemap(scene, options);
-  return tilemap;
-}
 

@@ -1,5 +1,5 @@
 // Map Editor UI - handles sidebar, properties panel, and map editor interactions
-import { ObjectTypes } from './objects.js';
+import { ObjectTypes } from './config/object-types.js';
 
 export class MapEditorUI {
   constructor() {

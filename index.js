@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createTilemap } from './map-editor/tilemap.js';
+import { Tilemap } from './map-editor/tilemap.js';
 import { MapEditor } from './map-editor/map-editor.js';
 import { UIManager } from './ui.js';
 import { RouteManager } from './map-editor/routes.js';
@@ -30,7 +30,7 @@ directionalLight.position.set(10, 20, 10);
 scene.add(directionalLight);
 
 // Create tilemap
-let tilemap = createTilemap(scene, { mapSize: 40, tileSize: 1, tileHeight: 0.1 });
+let tilemap = new Tilemap(scene, { mapSize: 40, tileSize: 1, tileHeight: 0.1 });
 
 // Initialize systems
 const routeManager = new RouteManager(scene, tilemap);
@@ -124,7 +124,7 @@ ui.onLoadGame = async (file) => {
     routeManager.clearAll();
     
     // Recreate tilemap with saved data
-    tilemap = createTilemap(scene, {
+    tilemap = new Tilemap(scene, {
       mapSize: gameState.mapConfig.mapSize,
       tileSize: gameState.mapConfig.tileSize,
       tileHeight: gameState.mapConfig.tileHeight,

@@ -279,8 +279,15 @@ export class RouteManager {
       route.tubeGeometry.dispose();
       route.material.dispose();
       route.tubeMaterial.dispose();
+      if (route.highlightLineMaterial) {
+        route.highlightLineMaterial.dispose();
+      }
+      if (route.highlightTubeMaterial) {
+        route.highlightTubeMaterial.dispose();
+      }
     });
     this.routes = [];
+    this.selectedRoute = null;
     this.removePreviewLine();
   }
 

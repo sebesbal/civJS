@@ -1,9 +1,6 @@
 import * as THREE from 'three';
 import { ObjectTypes } from './config/object-types.js';
 
-// Re-export ObjectTypes for backward compatibility with other modules
-export { ObjectTypes };
-
 // Object manager class
 export class ObjectManager {
   constructor(scene, tilemap = null) {

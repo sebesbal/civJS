@@ -58,35 +58,18 @@ export class CanvasTestBase {
 
     const canvasContainerRect = this.canvasContainer.getBoundingClientRect();
 
-    // Calculate available space (minus padding)
-    const padding = 20;
-    let newWidth = Math.max(100, Math.floor(canvasContainerRect.width - padding));
-    let newHeight = Math.max(100, Math.floor(canvasContainerRect.height - padding));
+    // Clamp to smallest of: canvas container, parent container, and viewport
+    const newWidth = Math.max(100, Math.floor(Math.min(
+      canvasContainerRect.width - 20,
+      containerRect.width - 40,
+      window.innerWidth - 250
+    )));
+    const newHeight = Math.max(100, Math.floor(Math.min(
+      canvasContainerRect.height - 20,
+      containerRect.height - 250,
+      window.innerHeight - 50
+    )));
 
-    // Safety checks
-    const maxWidthFromContainer = containerRect.width - 40;
-    const maxHeightFromContainer = containerRect.height - 250;
-
-    if (newWidth > maxWidthFromContainer && maxWidthFromContainer > 100) {
-      newWidth = Math.floor(maxWidthFromContainer);
-    }
-    if (newHeight > maxHeightFromContainer && maxHeightFromContainer > 100) {
-      newHeight = Math.floor(maxHeightFromContainer);
-    }
-
-    const maxViewportWidth = window.innerWidth - 250;
-    const maxViewportHeight = window.innerHeight - 50;
-    if (newWidth > maxViewportWidth && maxViewportWidth > 100) {
-      newWidth = Math.floor(maxViewportWidth);
-    }
-    if (newHeight > maxViewportHeight && maxViewportHeight > 100) {
-      newHeight = Math.floor(maxViewportHeight);
-    }
-
-    newWidth = Math.max(100, newWidth);
-    newHeight = Math.max(100, newHeight);
-
-    // Call hook for subclass to handle the new dimensions
     this.onResized(newWidth, newHeight);
   }
 

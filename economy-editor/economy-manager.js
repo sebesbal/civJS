@@ -195,7 +195,6 @@ export class EconomyManager {
   // Calculate depth of each node (distance from raw materials)
   calculateDepths() {
     const depths = new Map();
-    const visited = new Set();
 
     const calculateDepth = (nodeId) => {
       if (depths.has(nodeId)) {
