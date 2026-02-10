@@ -5,6 +5,7 @@ import { UIManager } from './ui.js';
 import { RouteManager } from './map-editor/routes.js';
 import { SaveLoadManager } from './map-editor/save-load.js';
 import { CameraController } from './map-editor/camera-controller.js';
+import { generateObjectTypesFromEconomy } from './map-editor/config/object-types.js';
 
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -72,6 +73,11 @@ function setupUICallbacks(ui, mapEditor, routeManager) {
   ui.onRouteDelete = (routeId) => {
     routeManager.removeRoute(routeId);
   };
+
+  // Wire economy-driven object types to the ObjectManager
+  ui.onObjectTypesChange = (objectTypes) => {
+    mapEditor.getObjectManager().setObjectTypes(objectTypes);
+  };
 }
 
 // Connect UI callbacks
@@ -94,10 +100,12 @@ ui.onLoadEconomy = async (file) => {
 ui.onSaveGame = () => {
   try {
     const objectManager = mapEditor.getObjectManager();
+    const economyManager = ui.economyEditorUI.economyManager;
     const gameStateJson = saveLoadManager.saveGameState(
       tilemap,
       objectManager,
-      routeManager
+      routeManager,
+      economyManager
     );
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     saveLoadManager.downloadGameState(gameStateJson, `game-save-${timestamp}.json`);
@@ -133,13 +141,21 @@ ui.onLoadGame = async (file) => {
     
     // Recreate map editor with new tiles and map config
     mapEditor = new MapEditor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig(), routeManager);
-    
+
     // Reconnect UI callbacks
     setupUICallbacks(ui, mapEditor, routeManager);
-    
+
+    // Restore economy data if included in save, then regenerate object types
+    if (gameState.economy) {
+      ui.economyEditorUI.economyManager.loadFromData(gameState.economy);
+    }
+    const objectTypes = generateObjectTypesFromEconomy(ui.economyEditorUI.economyManager);
+    ui.mapEditorUI.setObjectTypes(objectTypes);
+
     // Load objects
     const newObjectManager = mapEditor.getObjectManager();
     newObjectManager.setTilemap(tilemap); // Set tilemap reference for proper positioning
+    newObjectManager.setObjectTypes(objectTypes); // Set types before loading objects
     newObjectManager.loadFromData(gameState.objects, gameState.nextObjectId);
     
     // Load routes

@@ -24,6 +24,7 @@ export class EconomyEditorUI extends OrthographicViewerBase {
     // Callbacks
     this.onSaveEconomy = null;
     this.onLoadEconomy = null;
+    this.onEconomyChange = null; // Fired when economy is modified (add/edit/delete/load/generate)
     
     this.init();
   }
@@ -55,6 +56,9 @@ export class EconomyEditorUI extends OrthographicViewerBase {
     // Signal that content is ready - this fixes the timing issue
     // when the tab is selected before the economy is loaded
     this.onContentReady();
+
+    // Notify that economy data is now available
+    this.notifyEconomyChange();
   }
 
   // Load default economy file
@@ -414,6 +418,7 @@ export class EconomyEditorUI extends OrthographicViewerBase {
         
         await this.updateVisualization();
         this.updateNodeList();
+        this.notifyEconomyChange();
         document.body.removeChild(dialog);
       } catch (error) {
         alert('Error: ' + error.message);
@@ -487,6 +492,7 @@ export class EconomyEditorUI extends OrthographicViewerBase {
           this.deselectNode();
           await this.updateVisualization();
           this.updateNodeList();
+          this.notifyEconomyChange();
         } catch (error) {
           alert('Error: ' + error.message);
         }
@@ -497,6 +503,13 @@ export class EconomyEditorUI extends OrthographicViewerBase {
 
   hidePropertiesPanel() {
     this.propertiesPanel.style.display = 'none';
+  }
+
+  // Notify listeners that the economy has changed
+  notifyEconomyChange() {
+    if (this.onEconomyChange) {
+      this.onEconomyChange(this.economyManager);
+    }
   }
 
   async updateVisualization() {
@@ -530,7 +543,8 @@ export class EconomyEditorUI extends OrthographicViewerBase {
       this.deselectNode();
       await this.updateVisualization();
       this.updateNodeList();
-      
+      this.notifyEconomyChange();
+
       console.log('Economy loaded successfully');
     } catch (error) {
       console.error('Failed to load economy:', error);
@@ -568,7 +582,7 @@ export class EconomyEditorUI extends OrthographicViewerBase {
     const nodesInput = document.createElement('input');
     nodesInput.type = 'number';
     nodesInput.className = 'economy-input';
-    nodesInput.value = '20';
+    nodesInput.value = '8';
     nodesInput.min = '1';
     nodesInput.max = '100';
     dialogContent.appendChild(nodesInput);
@@ -662,7 +676,8 @@ export class EconomyEditorUI extends OrthographicViewerBase {
         this.deselectNode();
         await this.updateVisualization();
         this.updateNodeList();
-        
+        this.notifyEconomyChange();
+
         document.body.removeChild(dialog);
       } catch (error) {
         alert('Error generating economy: ' + error.message);

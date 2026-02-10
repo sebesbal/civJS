@@ -7,7 +7,7 @@ export class SaveLoadManager extends SaveLoadBase {
   }
 
   // Serialize game state to JSON
-  saveGameState(tilemap, objectManager, routeManager) {
+  saveGameState(tilemap, objectManager, routeManager, economyManager = null) {
     const tileData = tilemap.getTileData();
     const mapConfig = tilemap.getConfig();
     const objectData = objectManager.serialize();
@@ -22,6 +22,11 @@ export class SaveLoadManager extends SaveLoadBase {
       nextObjectId: objectData.nextId,
       nextRouteId: routeData.nextRouteId
     };
+
+    // Include economy data so factories can be reconstructed on load
+    if (economyManager) {
+      gameState.economy = economyManager.serialize();
+    }
 
     return JSON.stringify(gameState, null, 2);
   }

@@ -3,292 +3,106 @@
   "nodes": [
     {
       "id": 0,
-      "name": "Elephant",
-      "imagePath": "icons/animals/delapouite/elephant.svg",
+      "name": "Stable",
+      "imagePath": "icons/animals/delapouite/stable.svg",
       "inputs": []
     },
     {
       "id": 1,
-      "name": "Fish Corpse",
-      "imagePath": "icons/animals/lorc/fish-corpse.svg",
+      "name": "Wolverine Claws",
+      "imagePath": "icons/animals/lorc/wolverine-claws.svg",
       "inputs": []
     },
     {
       "id": 2,
-      "name": "Falcon Moon",
-      "imagePath": "icons/animals/delapouite/falcon-moon.svg",
-      "inputs": []
-    },
-    {
-      "id": 3,
-      "name": "Dinosaur Rex",
-      "imagePath": "icons/animals/lorc/dinosaur-rex.svg",
-      "inputs": []
-    },
-    {
-      "id": 4,
-      "name": "Manta Ray",
-      "imagePath": "icons/animals/delapouite/manta-ray.svg",
+      "name": "Pangolin",
+      "imagePath": "icons/animals/caro-asercion/pangolin.svg",
       "inputs": [
         {
           "productId": 0,
-          "amount": 3.9
+          "amount": 8
         },
         {
           "productId": 1,
-          "amount": 3.2
+          "amount": 1.6
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Bear Head",
+      "imagePath": "icons/animals/delapouite/bear-head.svg",
+      "inputs": [
+        {
+          "productId": 1,
+          "amount": 9
+        },
+        {
+          "productId": 0,
+          "amount": 6.3
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Mite Alt",
+      "imagePath": "icons/animals/carl-olsen/mite-alt.svg",
+      "inputs": [
+        {
+          "productId": 1,
+          "amount": 2.4
+        },
+        {
+          "productId": 2,
+          "amount": 8
+        },
+        {
+          "productId": 0,
+          "amount": 2.5
         }
       ]
     },
     {
       "id": 5,
-      "name": "Insect Jaws",
-      "imagePath": "icons/animals/lorc/insect-jaws.svg",
+      "name": "Sea Serpent",
+      "imagePath": "icons/animals/lorc/sea-serpent.svg",
       "inputs": [
         {
           "productId": 1,
-          "amount": 8.4
-        },
-        {
-          "productId": 0,
-          "amount": 8.5
-        },
-        {
-          "productId": 3,
-          "amount": 8.1
+          "amount": 9.8
         }
       ]
     },
     {
       "id": 6,
-      "name": "Chicken",
-      "imagePath": "icons/animals/delapouite/chicken.svg",
+      "name": "Turd",
+      "imagePath": "icons/animals/lorc/turd.svg",
       "inputs": [
         {
           "productId": 3,
-          "amount": 1.2
+          "amount": 4
+        },
+        {
+          "productId": 5,
+          "amount": 1.3
         }
       ]
     },
     {
       "id": 7,
-      "name": "Minotaur",
-      "imagePath": "icons/animals/lorc/minotaur.svg",
+      "name": "Giant Squid",
+      "imagePath": "icons/animals/delapouite/giant-squid.svg",
       "inputs": [
         {
           "productId": 1,
-          "amount": 5.9
-        },
-        {
-          "productId": 0,
-          "amount": 6.8
-        }
-      ]
-    },
-    {
-      "id": 8,
-      "name": "Animal Hide",
-      "imagePath": "icons/animals/delapouite/animal-hide.svg",
-      "inputs": [
-        {
-          "productId": 6,
-          "amount": 3.8
-        },
-        {
-          "productId": 0,
-          "amount": 3
-        },
-        {
-          "productId": 5,
-          "amount": 2.4
-        }
-      ]
-    },
-    {
-      "id": 9,
-      "name": "Octopus",
-      "imagePath": "icons/animals/lorc/octopus.svg",
-      "inputs": [
-        {
-          "productId": 5,
-          "amount": 6.1
-        }
-      ]
-    },
-    {
-      "id": 10,
-      "name": "Clownfish",
-      "imagePath": "icons/animals/delapouite/clownfish.svg",
-      "inputs": [
-        {
-          "productId": 0,
-          "amount": 4.8
-        },
-        {
-          "productId": 6,
-          "amount": 1.7
-        }
-      ]
-    },
-    {
-      "id": 11,
-      "name": "Ouroboros",
-      "imagePath": "icons/animals/lorc/ouroboros.svg",
-      "inputs": [
-        {
-          "productId": 6,
-          "amount": 2.7
-        },
-        {
-          "productId": 2,
-          "amount": 5.1
-        },
-        {
-          "productId": 7,
-          "amount": 4.9
-        }
-      ]
-    },
-    {
-      "id": 12,
-      "name": "Boar Tusks",
-      "imagePath": "icons/animals/lorc/boar-tusks.svg",
-      "inputs": [
-        {
-          "productId": 6,
-          "amount": 3.2
-        },
-        {
-          "productId": 0,
-          "amount": 1.2
-        }
-      ]
-    },
-    {
-      "id": 13,
-      "name": "Monkey",
-      "imagePath": "icons/animals/lorc/monkey.svg",
-      "inputs": [
-        {
-          "productId": 2,
-          "amount": 4.1
-        },
-        {
-          "productId": 11,
-          "amount": 7.9
-        },
-        {
-          "productId": 1,
-          "amount": 5.8
-        }
-      ]
-    },
-    {
-      "id": 14,
-      "name": "Parrot Head",
-      "imagePath": "icons/animals/lorc/parrot-head.svg",
-      "inputs": [
-        {
-          "productId": 10,
-          "amount": 1.1
+          "amount": 9
         },
         {
           "productId": 4,
-          "amount": 7.7
-        },
-        {
-          "productId": 3,
-          "amount": 2.6
-        }
-      ]
-    },
-    {
-      "id": 15,
-      "name": "Udder",
-      "imagePath": "icons/animals/delapouite/udder.svg",
-      "inputs": [
-        {
-          "productId": 0,
-          "amount": 3.6
-        },
-        {
-          "productId": 1,
-          "amount": 3.1
-        }
-      ]
-    },
-    {
-      "id": 16,
-      "name": "Cat",
-      "imagePath": "icons/animals/lorc/cat.svg",
-      "inputs": [
-        {
-          "productId": 6,
-          "amount": 7.4
-        },
-        {
-          "productId": 4,
-          "amount": 7.3
-        }
-      ]
-    },
-    {
-      "id": 17,
-      "name": "Flat Paw Print",
-      "imagePath": "icons/animals/lorc/flat-paw-print.svg",
-      "inputs": [
-        {
-          "productId": 4,
-          "amount": 5.9
-        },
-        {
-          "productId": 14,
-          "amount": 6.5
-        },
-        {
-          "productId": 2,
-          "amount": 1.5
-        }
-      ]
-    },
-    {
-      "id": 18,
-      "name": "Bull",
-      "imagePath": "icons/animals/lorc/bull.svg",
-      "inputs": [
-        {
-          "productId": 3,
-          "amount": 7.6
-        },
-        {
-          "productId": 13,
           "amount": 5.5
-        },
-        {
-          "productId": 14,
-          "amount": 5.9
-        }
-      ]
-    },
-    {
-      "id": 19,
-      "name": "Mounted Knight",
-      "imagePath": "icons/animals/skoll/mounted-knight.svg",
-      "inputs": [
-        {
-          "productId": 14,
-          "amount": 2.5
-        },
-        {
-          "productId": 3,
-          "amount": 4.9
-        },
-        {
-          "productId": 7,
-          "amount": 9.4
         }
       ]
     }
   ],
-  "nextNodeId": 20
+  "nextNodeId": 8
 }

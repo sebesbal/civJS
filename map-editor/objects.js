@@ -1,7 +1,6 @@
 import * as THREE from 'three';
-import { ObjectTypes } from './config/object-types.js';
 
-// Object manager class
+// Object manager class - uses dynamic type registry from economy data
 export class ObjectManager {
   constructor(scene, tilemap = null) {
     this.scene = scene;
@@ -9,10 +8,16 @@ export class ObjectManager {
     this.objects = [];
     this.nextId = 0;
     this.selectedObject = null;
+    this.objectTypes = {}; // Dynamic type registry
   }
 
   setTilemap(tilemap) {
     this.tilemap = tilemap;
+  }
+
+  // Update the object types registry (called when economy changes)
+  setObjectTypes(objectTypes) {
+    this.objectTypes = objectTypes || {};
   }
 
   // Calculate height offset for object based on its shape
@@ -26,7 +31,7 @@ export class ObjectManager {
   }
 
   createObject(type, position, id = null) {
-    const typeDef = ObjectTypes[type];
+    const typeDef = this.objectTypes[type];
     if (!typeDef) {
       console.error(`Unknown object type: ${type}`);
       return null;
@@ -52,10 +57,10 @@ export class ObjectManager {
 
     const material = new THREE.MeshStandardMaterial({ color: typeDef.color });
     const mesh = new THREE.Mesh(geometry, material);
-    
+
     // Calculate object height offset so it sits on top of the tile surface
     const heightOffset = this.getObjectHeightOffset(typeDef);
-    
+
     // Position object on top of tile (position.y is the tile top surface)
     mesh.position.set(position.x, position.y + heightOffset, position.z);
     mesh.castShadow = true;
@@ -78,7 +83,7 @@ export class ObjectManager {
 
     this.objects.push(objectData);
     this.scene.add(mesh);
-    
+
     return objectData;
   }
 
@@ -90,23 +95,23 @@ export class ObjectManager {
     this.scene.remove(objectData.mesh);
     objectData.mesh.geometry.dispose();
     objectData.mesh.material.dispose();
-    
+
     if (objectData.highlightMaterial) {
       objectData.highlightMaterial.dispose();
     }
 
     this.objects.splice(index, 1);
-    
+
     if (this.selectedObject && this.selectedObject.id === objectId) {
       this.deselectObject();
     }
-    
+
     return true;
   }
 
   selectObject(objectId) {
     this.deselectObject();
-    
+
     const objectData = this.objects.find(obj => obj.id === objectId);
     if (!objectData) return null;
 
@@ -116,10 +121,10 @@ export class ObjectManager {
       emissive: objectData.originalMaterial.color.getHex(),
       emissiveIntensity: 0.3
     });
-    
+
     objectData.highlightMaterial = highlightMaterial;
     objectData.mesh.material = highlightMaterial;
-    
+
     this.selectedObject = objectData;
     return objectData;
   }
@@ -139,7 +144,8 @@ export class ObjectManager {
     const objectData = this.objects.find(obj => obj.id === objectId);
     if (!objectData) return false;
 
-    const typeDef = ObjectTypes[objectData.type];
+    const typeDef = this.objectTypes[objectData.type];
+    if (!typeDef) return false;
     const heightOffset = this.getObjectHeightOffset(typeDef);
 
     objectData.mesh.position.set(
@@ -147,7 +153,7 @@ export class ObjectManager {
       newPosition.y + heightOffset,
       newPosition.z
     );
-    
+
     return true;
   }
 
@@ -176,9 +182,9 @@ export class ObjectManager {
   serialize() {
     const objects = this.objects.map(obj => {
       const pos = obj.mesh.position;
-      const typeDef = ObjectTypes[obj.type];
-      const heightOffset = this.getObjectHeightOffset(typeDef);
-      
+      const typeDef = this.objectTypes[obj.type];
+      const heightOffset = typeDef ? this.getObjectHeightOffset(typeDef) : 0;
+
       return {
         id: obj.id,
         type: obj.type,
@@ -189,7 +195,7 @@ export class ObjectManager {
         }
       };
     });
-    
+
     return {
       objects: objects,
       nextId: this.nextId
@@ -200,19 +206,25 @@ export class ObjectManager {
   loadFromData(objectsData, nextId) {
     // Clear existing objects
     this.clearAll();
-    
+
     // Set next ID
     this.nextId = nextId || 0;
-    
+
     // Recreate objects with their original IDs
     if (objectsData && Array.isArray(objectsData)) {
       objectsData.forEach(objData => {
+        // Skip objects whose type is no longer in the registry
+        if (!this.objectTypes[objData.type]) {
+          console.warn(`Skipping object with unknown type: ${objData.type}`);
+          return;
+        }
+
         // Use saved position, but if tilemap is available, use actual tile top surface
         let yPosition = objData.position.y;
         if (this.tilemap) {
           yPosition = this.tilemap.getTileTopSurface(objData.position.x, objData.position.z);
         }
-        
+
         const position = new THREE.Vector3(
           objData.position.x,
           yPosition,
@@ -223,4 +235,3 @@ export class ObjectManager {
     }
   }
 }
-

@@ -1,6 +1,7 @@
 // UI Manager - coordinates different editor UIs
 import { MapEditorUI } from './map-editor/map-editor-ui.js';
 import { EconomyEditorUI } from './economy-editor/economy-editor-ui.js';
+import { generateObjectTypesFromEconomy } from './map-editor/config/object-types.js';
 import { ViewportControllerTest } from './test/viewport-controller-test.js';
 import { ObjectSceneTest } from './test/object-scene-test.js';
 
@@ -16,6 +17,9 @@ export class UIManager {
     this.currentEditorMode = savedMode; // 'MAP_EDITOR', 'ECONOMY_EDITOR', or 'TEST_EDITOR'
     this.onEditorModeChange = null;
     this.renderer = null;
+
+    // Callback for external code that needs to know when object types change
+    this.onObjectTypesChange = null;
 
     // Define forwarded callback properties dynamically
     this._setupCallbackForwarding([
@@ -57,8 +61,24 @@ export class UIManager {
     this.mapEditorUI = new MapEditorUI();
     this.economyEditorUI = new EconomyEditorUI();
     this.createTestEditorUI();
+
+    // Wire economy changes to update map editor factory list
+    this.economyEditorUI.onEconomyChange = (economyManager) => {
+      this.updateMapObjectTypes(economyManager);
+    };
+
     // Set the saved mode (or default to MAP_EDITOR)
     this.setEditorMode(this.currentEditorMode);
+  }
+
+  // Generate object types from economy and push to map editor UI and object manager
+  updateMapObjectTypes(economyManager) {
+    const objectTypes = generateObjectTypesFromEconomy(economyManager);
+    this.mapEditorUI.setObjectTypes(objectTypes);
+    // Notify external code (e.g., ObjectManager in index.js)
+    if (this.onObjectTypesChange) {
+      this.onObjectTypesChange(objectTypes);
+    }
   }
 
   _createButton(text, className, dataset, onClick, parent) {
