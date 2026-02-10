@@ -252,18 +252,28 @@ export class SimulationEngine {
         const path = findPath(this.tilemap, sourceGrid, destGrid, this.roadTiles);
         if (!path || path.length < 2) continue;
 
-        // Transport cost = path length * fuel per tile (simplified: 0.5 per tile, 0.15 on road)
-        let transportCost = 0;
+        // Calculate fuel consumption based on path length
+        let fuelRequired = 0;
         for (const step of path) {
-          transportCost += this.roadTiles.has(`${step.gridX},${step.gridZ}`) ? 0.15 : 0.5;
+          fuelRequired += this.roadTiles.has(`${step.gridX},${step.gridZ}`) ? 0.15 : 0.5;
+        }
+
+        // Check if source has enough fuel (if fuel is designated)
+        const fuelProductId = this.economyManager.getFuelProductId();
+        if (fuelProductId !== null) {
+          const fuelStorage = sourceState.outputStorage.get(fuelProductId) ||
+                             sourceState.inputStorage.get(fuelProductId);
+          if (!fuelStorage || fuelStorage.current < fuelRequired) {
+            continue; // Not enough fuel, skip this trade
+          }
         }
 
         const sellPrice = sourceState.getSellPrice(productId);
         const buyPrice = buyer.state.getBuyPrice(productId);
 
-        // Trade is profitable if buyer pays more than seller price + transport
-        if (buyPrice > sellPrice + transportCost) {
-          this._createTrader(sourceState, buyer.state, productId, path);
+        // Trade is profitable if buyer pays more than seller price + fuel cost
+        if (buyPrice > sellPrice + fuelRequired) {
+          this._createTrader(sourceState, buyer.state, productId, path, fuelRequired);
         }
       }
     }
@@ -310,14 +320,27 @@ export class SimulationEngine {
 
   /**
    * Create an active trader to transport goods.
+   * @param {number} fuelRequired - amount of fuel needed for this trip
    */
-  _createTrader(sourceState, destState, productId, path) {
+  _createTrader(sourceState, destState, productId, path, fuelRequired = 0) {
     // Withdraw goods from source
     const outputStorage = sourceState.outputStorage.get(productId);
     if (!outputStorage || outputStorage.current < 1) return;
 
     const amount = Math.min(Math.floor(outputStorage.current), 5); // Max 5 units per trip
     if (amount <= 0) return;
+
+    // Consume fuel from source
+    const fuelProductId = this.economyManager.getFuelProductId();
+    if (fuelProductId !== null && fuelRequired > 0) {
+      // Try output storage first, then input storage
+      const fuelStorage = sourceState.outputStorage.get(fuelProductId) ||
+                         sourceState.inputStorage.get(fuelProductId);
+      if (!fuelStorage || fuelStorage.current < fuelRequired) {
+        return; // Not enough fuel, abort trade
+      }
+      fuelStorage.current -= fuelRequired;
+    }
 
     outputStorage.current -= amount;
 

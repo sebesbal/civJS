@@ -480,6 +480,34 @@ export class MapEditorUI {
       );
     }
 
+    // Fuel storage section (always show if fuel is designated)
+    const fuelProductId = economyManager ? economyManager.getFuelProductId() : null;
+    if (fuelProductId !== null) {
+      const fuelTitle = document.createElement('div');
+      fuelTitle.className = 'inspector-section-title';
+      fuelTitle.innerHTML = '⛽ Fuel Storage';
+      this.propertiesPanel.appendChild(fuelTitle);
+
+      // Check both input and output storage for fuel
+      let fuelStorage = actorState.inputStorage.get(fuelProductId) ||
+                       actorState.outputStorage.get(fuelProductId);
+
+      // If no fuel storage exists, show empty (0/0)
+      if (!fuelStorage) {
+        fuelStorage = { current: 0, capacity: 0, ideal: 0 };
+      }
+
+      const fuelInfo = this._getProductInfo(fuelProductId, economyManager);
+      this.propertiesPanel.appendChild(
+        this._createStorageBar(
+          `${fuelInfo.name}: ${fuelStorage.current.toFixed(1)} / ${fuelStorage.capacity}`,
+          fuelStorage.current,
+          fuelStorage.capacity,
+          fuelInfo
+        )
+      );
+    }
+
     // Input storage section
     if (actorState.inputStorage.size > 0) {
       const inputTitle = document.createElement('div');
@@ -488,6 +516,9 @@ export class MapEditorUI {
       this.propertiesPanel.appendChild(inputTitle);
 
       for (const [productId, storage] of actorState.inputStorage) {
+        // Skip fuel if already shown in fuel section
+        if (fuelProductId !== null && productId === fuelProductId) continue;
+
         const productInfo = this._getProductInfo(productId, economyManager);
         this.propertiesPanel.appendChild(
           this._createStorageBar(
@@ -508,6 +539,9 @@ export class MapEditorUI {
       this.propertiesPanel.appendChild(outputTitle);
 
       for (const [productId, storage] of actorState.outputStorage) {
+        // Skip fuel if already shown in fuel section
+        if (fuelProductId !== null && productId === fuelProductId) continue;
+
         const productInfo = this._getProductInfo(productId, economyManager);
         this.propertiesPanel.appendChild(
           this._createStorageBar(

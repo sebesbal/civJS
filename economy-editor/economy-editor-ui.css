@@ -66,6 +66,9 @@
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .economy-node-item:hover {
@@ -75,6 +78,16 @@
 .economy-node-item.selected {
   background: rgba(74, 158, 255, 0.3);
   border-color: #4a9eff;
+}
+
+.fuel-indicator {
+  font-size: 16px;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.economy-node-item span {
+  pointer-events: none;
 }
 
 .economy-btn {

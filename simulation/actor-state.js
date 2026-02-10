@@ -50,6 +50,22 @@ export class ActorState {
       ideal: outputCapacity * 0.5
     });
 
+    // Add fuel storage if fuel is designated and not already in inputs/outputs
+    const fuelProductId = economyManager.getFuelProductId();
+    if (fuelProductId !== null && fuelProductId !== this.productId) {
+      const hasInInput = this.inputStorage.has(fuelProductId);
+      const hasInOutput = this.outputStorage.has(fuelProductId);
+
+      if (!hasInInput && !hasInOutput) {
+        // Add fuel to input storage with smaller capacity (since it's consumed for transport)
+        this.inputStorage.set(fuelProductId, {
+          current: 0,
+          capacity: 10, // Smaller capacity for fuel
+          ideal: 5
+        });
+      }
+    }
+
     // Initialize prices for all stored products
     this._recalculatePrices();
   }
@@ -71,6 +87,8 @@ export class ActorState {
         ideal: capacityPerProduct * 0.5
       });
     }
+
+    // Warehouses already store all products, so fuel storage is included above
 
     this._recalculatePrices();
   }

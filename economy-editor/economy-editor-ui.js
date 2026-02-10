@@ -243,17 +243,30 @@ export class EconomyEditorUI extends OrthographicViewerBase {
   updateNodeList() {
     this.nodeList.innerHTML = '';
     const nodes = this.economyManager.getAllNodes();
-    
+    const fuelProductId = this.economyManager.getFuelProductId();
+
     nodes.forEach(node => {
       const nodeItem = document.createElement('div');
       nodeItem.className = 'economy-node-item';
       if (node.id === this.selectedNodeId) {
         nodeItem.classList.add('selected');
       }
-      
-      nodeItem.textContent = node.name;
+
+      // Add fuel indicator if this is the fuel product
+      if (node.id === fuelProductId) {
+        const fuelIndicator = document.createElement('span');
+        fuelIndicator.className = 'fuel-indicator';
+        fuelIndicator.textContent = '⛽';
+        fuelIndicator.title = 'Fuel Product';
+        nodeItem.appendChild(fuelIndicator);
+      }
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = node.name;
+      nodeItem.appendChild(nameSpan);
+
       nodeItem.addEventListener('click', () => this.selectNode(node.id));
-      
+
       this.nodeList.appendChild(nodeItem);
     });
   }
@@ -481,6 +494,27 @@ export class EconomyEditorUI extends OrthographicViewerBase {
       this.hidePropertiesPanel();
     });
     this.propertiesPanel.appendChild(editBtn);
+
+    // Fuel button
+    const isFuel = this.economyManager.isFuel(nodeId);
+    const fuelBtn = document.createElement('button');
+    fuelBtn.className = 'economy-btn';
+    fuelBtn.textContent = isFuel ? '⛽ Unset as Fuel' : '⛽ Set as Fuel';
+    fuelBtn.addEventListener('click', async () => {
+      try {
+        if (isFuel) {
+          this.economyManager.setFuelProduct(null);
+        } else {
+          this.economyManager.setFuelProduct(nodeId);
+        }
+        this.updateNodeList();
+        this.showPropertiesPanel(nodeId); // Refresh properties panel
+        this.notifyEconomyChange();
+      } catch (error) {
+        alert('Error: ' + error.message);
+      }
+    });
+    this.propertiesPanel.appendChild(fuelBtn);
 
     const deleteBtn = document.createElement('button');
     deleteBtn.className = 'economy-btn economy-btn-danger';

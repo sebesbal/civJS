@@ -104,5 +104,6 @@
       ]
     }
   ],
-  "nextNodeId": 8
+  "nextNodeId": 8,
+  "fuelProductId": 1
 }

@@ -5,6 +5,7 @@ export class EconomyManager {
   constructor() {
     this.nodes = new Map(); // Map<id, ProductNode>
     this.nextNodeId = 0;
+    this.fuelProductId = null; // ID of the product designated as fuel
   }
 
   // Add a new node to the DAG
@@ -225,13 +226,32 @@ export class EconomyManager {
     return depths;
   }
 
+  // Set the fuel product
+  setFuelProduct(productId) {
+    if (productId !== null && !this.nodes.has(productId)) {
+      throw new Error(`Product ID ${productId} does not exist`);
+    }
+    this.fuelProductId = productId;
+  }
+
+  // Get the fuel product ID
+  getFuelProductId() {
+    return this.fuelProductId;
+  }
+
+  // Check if a product is the fuel
+  isFuel(productId) {
+    return this.fuelProductId === productId;
+  }
+
   // Serialize entire economy to JSON-compatible object
   serialize() {
     const nodes = Array.from(this.nodes.values()).map(node => node.serialize());
     return {
       version: 1,
       nodes: nodes,
-      nextNodeId: this.nextNodeId
+      nextNodeId: this.nextNodeId,
+      fuelProductId: this.fuelProductId
     };
   }
 
@@ -239,6 +259,7 @@ export class EconomyManager {
   loadFromData(data) {
     this.nodes.clear();
     this.nextNodeId = data.nextNodeId || 0;
+    this.fuelProductId = data.fuelProductId ?? null;
 
     if (data.nodes && Array.isArray(data.nodes)) {
       for (const nodeData of data.nodes) {
