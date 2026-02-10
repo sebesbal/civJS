@@ -137,11 +137,13 @@ ui.onLoadEconomy = async (file) => {
 // Simulation callbacks
 const randomFactoryGenerator = new RandomFactoryGenerator();
 
-ui.onGenerateRandomFactories = () => {
+ui.onGenerateRandomFactories = (totalFactories = null) => {
   const economyManager = ui.economyEditorUI.economyManager;
   const objectManager = mapEditor.getObjectManager();
-  const created = randomFactoryGenerator.generate(economyManager, objectManager, tilemap);
-  console.log(`Generated ${created.length} factories`);
+  const options = { totalFactories };
+  const created = randomFactoryGenerator.generate(economyManager, objectManager, tilemap, options);
+  const modeText = totalFactories ? `${totalFactories} (target)` : 'auto-scaled';
+  console.log(`Generated ${created.length} factories (${modeText})`);
 };
 
 ui.onSimulationToggle = () => {

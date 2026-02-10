@@ -6,27 +6,18 @@ export class RandomFactoryGenerator {
    * @param {EconomyManager} economyManager
    * @param {ObjectManager} objectManager
    * @param {Tilemap} tilemap
-   * @param {Object} options - { minSpacing: 2 }
+   * @param {Object} options - { minSpacing: 2, totalFactories: null (auto) }
    * @returns {number[]} array of created object IDs
    */
   generate(economyManager, objectManager, tilemap, options = {}) {
     const minSpacing = options.minSpacing ?? 2;
+    const totalFactories = options.totalFactories ?? null;
 
     const nodes = economyManager.getAllNodes();
     if (nodes.length === 0) return [];
 
-    const depths = economyManager.calculateDepths();
-
-    // Determine how many factories per product based on depth
-    const factoryCounts = new Map();
-    for (const node of nodes) {
-      const depth = depths.get(node.id) ?? 0;
-      let count;
-      if (depth === 0) count = 3;       // Raw materials: 3 each
-      else if (depth <= 2) count = 2;    // Intermediate: 2 each
-      else count = 1;                     // High-tier: 1 each
-      factoryCounts.set(node.id, count);
-    }
+    // Calculate factory counts based on consumption demand
+    const factoryCounts = this._calculateFactoryCounts(economyManager, nodes, totalFactories);
 
     // Find valid tiles (non-water, unoccupied)
     const validTiles = this._getValidTiles(tilemap, objectManager, minSpacing);
@@ -111,6 +102,122 @@ export class RandomFactoryGenerator {
     }
 
     return validTiles;
+  }
+
+  /**
+   * Calculate factory counts based on input/output ratios in the economy.
+   * Products with higher demand need more factories producing them.
+   * @param {EconomyManager} economyManager
+   * @param {Array} nodes - all economy nodes
+   * @param {number|null} totalFactories - target total number of factories (null = auto-scale)
+   */
+  _calculateFactoryCounts(economyManager, nodes, totalFactories = null) {
+    const factoryCounts = new Map();
+
+    // Step 1: Find sink nodes (products not consumed by anyone)
+    const sinkNodes = new Set();
+    for (const node of nodes) {
+      const isConsumed = nodes.some(n =>
+        n.inputs.some(input => input.productId === node.id)
+      );
+      if (!isConsumed) {
+        sinkNodes.add(node.id);
+      }
+    }
+
+    // Step 2: Calculate relative demand for each product
+    // We'll work backwards from sinks, propagating demand upstream
+    const demand = new Map();
+
+    // Initialize: sinks have base demand of 1.0
+    for (const node of nodes) {
+      demand.set(node.id, sinkNodes.has(node.id) ? 1.0 : 0.0);
+    }
+
+    // Propagate demand upstream through the dependency graph
+    // We need to iterate multiple times to handle complex graphs
+    const maxIterations = nodes.length;
+    for (let iter = 0; iter < maxIterations; iter++) {
+      let changed = false;
+
+      for (const node of nodes) {
+        if (node.inputs.length === 0) continue; // Raw materials
+
+        // This node's demand determines input demand
+        const nodeDemand = demand.get(node.id);
+        if (nodeDemand === 0) continue;
+
+        // Each factory producing this node consumes its inputs
+        for (const input of node.inputs) {
+          const currentDemand = demand.get(input.productId);
+          const newDemand = currentDemand + (nodeDemand * input.amount);
+          if (Math.abs(newDemand - currentDemand) > 0.001) {
+            demand.set(input.productId, newDemand);
+            changed = true;
+          }
+        }
+      }
+
+      if (!changed) break;
+    }
+
+    // Step 3: Convert demand to factory counts
+    // Find max demand and total demand
+    let maxDemand = 0;
+    let totalDemand = 0;
+    for (const d of demand.values()) {
+      maxDemand = Math.max(maxDemand, d);
+      totalDemand += d;
+    }
+
+    if (maxDemand === 0) {
+      // Fallback: use depth-based approach
+      const depths = economyManager.calculateDepths();
+      for (const node of nodes) {
+        const depth = depths.get(node.id) ?? 0;
+        let count;
+        if (depth === 0) count = 3;
+        else if (depth <= 2) count = 2;
+        else count = 1;
+        factoryCounts.set(node.id, count);
+      }
+      return factoryCounts;
+    }
+
+    // Distribute factories based on relative demand
+    if (totalFactories !== null && totalFactories > 0) {
+      // User specified a total - distribute proportionally
+      let allocatedFactories = 0;
+      const sortedNodes = [...nodes].sort((a, b) => demand.get(b.id) - demand.get(a.id));
+
+      for (let i = 0; i < sortedNodes.length; i++) {
+        const node = sortedNodes[i];
+        const nodeDemand = demand.get(node.id);
+
+        if (i === sortedNodes.length - 1) {
+          // Last product gets remaining factories (ensures we hit the target exactly)
+          const count = Math.max(1, totalFactories - allocatedFactories);
+          factoryCounts.set(node.id, count);
+          allocatedFactories += count;
+        } else {
+          // Proportional allocation based on demand
+          const ratio = nodeDemand / totalDemand;
+          const count = Math.max(1, Math.round(totalFactories * ratio));
+          factoryCounts.set(node.id, count);
+          allocatedFactories += count;
+        }
+      }
+    } else {
+      // Auto-scale: min 2, max 16 per product (2x baseline)
+      for (const node of nodes) {
+        const nodeDemand = demand.get(node.id);
+        const ratio = nodeDemand / maxDemand;
+        const count = Math.max(2, Math.min(16, Math.round(ratio * 16)));
+        factoryCounts.set(node.id, count);
+      }
+    }
+
+    return factoryCounts;
   }
 
   /** Fisher-Yates shuffle */

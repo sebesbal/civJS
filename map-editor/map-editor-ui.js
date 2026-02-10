@@ -208,12 +208,34 @@ export class MapEditorUI {
     speedContainer.appendChild(speedSlider);
     simulationSection.appendChild(speedContainer);
 
+    // Factory count input
+    const factoryCountContainer = document.createElement('div');
+    factoryCountContainer.className = 'factory-count-container';
+
+    const factoryCountLabel = document.createElement('label');
+    factoryCountLabel.className = 'factory-count-label';
+    factoryCountLabel.textContent = 'Total Factories:';
+    factoryCountContainer.appendChild(factoryCountLabel);
+
+    this.factoryCountInput = document.createElement('input');
+    this.factoryCountInput.type = 'number';
+    this.factoryCountInput.className = 'factory-count-input';
+    this.factoryCountInput.min = '0';
+    this.factoryCountInput.placeholder = 'Auto';
+    this.factoryCountInput.title = 'Leave empty for automatic scaling';
+    factoryCountContainer.appendChild(this.factoryCountInput);
+
+    simulationSection.appendChild(factoryCountContainer);
+
     const generateBtn = document.createElement('button');
     generateBtn.className = 'sim-btn';
     generateBtn.textContent = 'Generate Factories';
     generateBtn.addEventListener('click', () => {
       if (this.onGenerateRandomFactories) {
-        this.onGenerateRandomFactories();
+        // Get the factory count value (null if empty for auto-scaling)
+        const value = this.factoryCountInput.value.trim();
+        const totalFactories = value ? parseInt(value, 10) : null;
+        this.onGenerateRandomFactories(totalFactories);
       }
     });
     simulationSection.appendChild(generateBtn);
