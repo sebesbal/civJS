@@ -56,7 +56,7 @@ function getOrCreateSimulationEngine() {
     simulationEngine = new SimulationEngine(economyManager, objectManager, routeManager, tilemap);
     tradeRenderer = new TradeRenderer(scene, simulationEngine, tilemap);
 
-    // Live refresh of properties panel on each tick
+    // Live refresh of properties panel and factory overview on each tick
     simulationEngine.onTick = () => {
       const selectedObject = mapEditor.getSelectedObject();
       if (selectedObject && simulationEngine) {
@@ -65,6 +65,8 @@ function getOrCreateSimulationEngine() {
           ui.showFactoryInspector(selectedObject, actorState, ui.economyEditorUI.economyManager);
         }
       }
+      // Update factory overview tab
+      ui.factoryOverviewUI.onSimulationTick();
     };
   } else {
     // Update references in case tilemap/mapEditor were recreated (e.g., after load)
@@ -148,6 +150,7 @@ ui.onGenerateRandomFactories = (totalFactories = null) => {
 
 ui.onSimulationToggle = () => {
   const engine = getOrCreateSimulationEngine();
+  ui.factoryOverviewUI.setSimulationEngine(engine);
   if (engine.isRunning) {
     engine.stop();
     ui.setSimulationRunning(false);
@@ -242,11 +245,15 @@ ui.onLoadGame = async (file) => {
     routeManager.setTilemap(tilemap); // Set tilemap reference for proper positioning
     routeManager.loadFromData(gameState.routes, gameState.nextRouteId);
     
+    // Update factory overview with economy data
+    ui.factoryOverviewUI.setEconomyManager(ui.economyEditorUI.economyManager);
+
     // Restore simulation state if present in save
     if (gameState.simulation) {
       const engine = getOrCreateSimulationEngine();
       engine.loadFromData(gameState.simulation);
       ui.setSimulationRunning(engine.isRunning);
+      ui.factoryOverviewUI.setSimulationEngine(engine);
     }
 
     // Reset camera to default position

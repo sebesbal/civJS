@@ -1,0 +1,183 @@
+/* Factory Overview UI Styles */
+
+#factory-overview-ui {
+  position: fixed;
+  left: 60px;
+  top: 0;
+  width: calc(100% - 60px);
+  height: 100vh;
+  background: rgba(30, 30, 30, 0.95);
+  backdrop-filter: blur(10px);
+  color: #ffffff;
+  z-index: 1000;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+  display: none;
+  overflow: hidden;
+}
+
+#factory-overview-ui.visible {
+  display: block;
+}
+
+.fo-title {
+  margin: 0;
+  padding: 20px;
+  font-size: 18px;
+  font-weight: 600;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.fo-content {
+  display: flex;
+  height: calc(100vh - 70px);
+}
+
+.fo-canvas-container {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.fo-canvas-container canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.fo-properties-panel {
+  width: 300px;
+  padding: 20px;
+  background: rgba(20, 20, 20, 0.95);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  overflow-y: auto;
+}
+
+.fo-properties-panel h4 {
+  margin: 0 0 20px 0;
+  font-size: 16px;
+  font-weight: 600;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+  padding-bottom: 10px;
+}
+
+.fo-property-row {
+  margin-bottom: 15px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.fo-property-row strong {
+  color: #aaaaaa;
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fo-property-row span {
+  color: #ffffff;
+  display: block;
+}
+
+/* Storage bars in properties panel */
+.fo-storage-bar {
+  margin-bottom: 8px;
+}
+
+.fo-storage-bar-label {
+  font-size: 12px;
+  color: #aaaaaa;
+  margin-bottom: 2px;
+}
+
+.fo-storage-bar-track {
+  width: 100%;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+}
+
+.fo-storage-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.fo-storage-bar-fill.output {
+  background: #4a9eff;
+}
+
+.fo-storage-bar-fill.input {
+  background: #ff9f43;
+}
+
+.fo-storage-bar-text {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: bold;
+  color: #ffffff;
+  text-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
+}
+
+/* Status breakdown in properties panel */
+.fo-status-breakdown {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.fo-status-chip {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fo-status-chip.producing {
+  background: rgba(46, 204, 113, 0.3);
+  color: #2ecc71;
+}
+
+.fo-status-chip.idle {
+  background: rgba(149, 165, 166, 0.3);
+  color: #95a5a6;
+}
+
+.fo-status-chip.output_full {
+  background: rgba(231, 76, 60, 0.3);
+  color: #e74c3c;
+}
+
+.fo-status-chip.missing_inputs {
+  background: rgba(243, 156, 18, 0.3);
+  color: #f39c12;
+}
+
+/* Scrollbar styling */
+.fo-properties-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.fo-properties-panel::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.fo-properties-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.fo-properties-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}

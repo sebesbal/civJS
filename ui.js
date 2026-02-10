@@ -1,6 +1,7 @@
 // UI Manager - coordinates different editor UIs
 import { MapEditorUI } from './map-editor/map-editor-ui.js';
 import { EconomyEditorUI } from './economy-editor/economy-editor-ui.js';
+import { FactoryOverviewUI } from './factory-overview/factory-overview-ui.js';
 import { generateObjectTypesFromEconomy } from './map-editor/config/object-types.js';
 import { ViewportControllerTest } from './test/viewport-controller-test.js';
 import { ObjectSceneTest } from './test/object-scene-test.js';
@@ -10,6 +11,7 @@ export class UIManager {
     this.mainToolbar = null;
     this.mapEditorUI = null;
     this.economyEditorUI = null;
+    this.factoryOverviewUI = null;
     this.testEditorUI = null;
     this.testToolbar = null;
     // Load saved mode from localStorage, default to 'MAP_EDITOR'
@@ -63,11 +65,13 @@ export class UIManager {
     this.createMainToolbar();
     this.mapEditorUI = new MapEditorUI();
     this.economyEditorUI = new EconomyEditorUI();
+    this.factoryOverviewUI = new FactoryOverviewUI();
     this.createTestEditorUI();
 
-    // Wire economy changes to update map editor factory list
+    // Wire economy changes to update map editor factory list and factory overview
     this.economyEditorUI.onEconomyChange = (economyManager) => {
       this.updateMapObjectTypes(economyManager);
+      this.factoryOverviewUI.setEconomyManager(economyManager);
     };
 
     // Set the saved mode (or default to MAP_EDITOR)
@@ -206,6 +210,7 @@ export class UIManager {
     const modes = [
       { text: 'Map', mode: 'MAP_EDITOR', title: 'Map Editor' },
       { text: 'Econ', mode: 'ECONOMY_EDITOR', title: 'Economy Editor' },
+      { text: 'Fact', mode: 'FACTORY_OVERVIEW', title: 'Factory Overview' },
       { text: 'Test', mode: 'TEST_EDITOR', title: 'Test Editor' },
     ];
 
@@ -236,6 +241,7 @@ export class UIManager {
 
     isMap ? this.mapEditorUI.show() : this.mapEditorUI.hide();
     mode === 'ECONOMY_EDITOR' ? this.economyEditorUI.show() : this.economyEditorUI.hide();
+    mode === 'FACTORY_OVERVIEW' ? this.factoryOverviewUI.show() : this.factoryOverviewUI.hide();
 
     if (this.testEditorUI) {
       this.testEditorUI.style.display = isTest ? 'block' : 'none';
