@@ -153,20 +153,30 @@ export class MapEditor {
   }
 
   handleMouseDown(event) {
+    const result = this.raycast(event);
+
+    // Handle object clicks in VIEW mode (for inspection)
     if (this.mode === 'VIEW' && !this.isRouteMode) {
       this.routeManager.deselectRoute();
-      return false; // Let camera handle it
+
+      if (result && result.type === 'object') {
+        this.objectManager.selectObject(result.object.id);
+        // Return the selected object for inspection
+        return { handled: true, selectedObject: result.object };
+      }
+
+      this.objectManager.deselectObject();
+      return { handled: false };
     }
 
-    const result = this.raycast(event);
     if (!result) {
       this.routeManager.deselectRoute();
       this.objectManager.deselectObject();
-      return false;
+      return { handled: false };
     }
 
     if (this.isRouteMode) {
-      return false;
+      return { handled: false };
     }
 
     if (result.type === 'object') {
@@ -178,29 +188,29 @@ export class MapEditor {
         this.dragObject = result.object;
         this.dragStartPosition = new THREE.Vector2(event.clientX, event.clientY);
       }
-      return true;
+      return { handled: true, selectedObject: result.object };
     } else if (result.type === 'route') {
       this.objectManager.deselectObject();
       this.routeManager.selectRoute(result.route.id);
-      return true;
+      return { handled: true };
     } else if (result.type === 'tile') {
       if (this.selectedObjectType) {
         const tileTopY = this.getTileTopSurfaceFromResult(result);
-        if (tileTopY === null) return false;
+        if (tileTopY === null) return { handled: false };
 
         const position = result.position.clone();
         position.y = tileTopY;
 
         this.objectManager.createObject(this.selectedObjectType, position);
-        return true;
+        return { handled: true };
       } else {
         this.routeManager.deselectRoute();
         this.objectManager.deselectObject();
-        return false;
+        return { handled: false };
       }
     }
 
-    return false;
+    return { handled: false };
   }
 
   handleMouseMove(event) {
@@ -227,7 +237,8 @@ export class MapEditor {
   }
 
   handleRightClick(event) {
-    if (this.mode !== 'EDIT' && !this.isRouteMode) {
+    // Allow right-click in both VIEW and EDIT modes (but not during route creation)
+    if (this.isRouteMode) {
       return false;
     }
 

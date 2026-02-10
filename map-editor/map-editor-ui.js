@@ -466,9 +466,14 @@ export class MapEditorUI {
       this.propertiesPanel.appendChild(inputTitle);
 
       for (const [productId, storage] of actorState.inputStorage) {
-        const name = this._getProductName(productId, economyManager);
+        const productInfo = this._getProductInfo(productId, economyManager);
         this.propertiesPanel.appendChild(
-          this._createStorageBar(`${name}: ${storage.current.toFixed(1)} / ${storage.capacity}`, storage.current, storage.capacity)
+          this._createStorageBar(
+            `${productInfo.name}: ${storage.current.toFixed(1)} / ${storage.capacity}`,
+            storage.current,
+            storage.capacity,
+            productInfo
+          )
         );
       }
     }
@@ -481,9 +486,14 @@ export class MapEditorUI {
       this.propertiesPanel.appendChild(outputTitle);
 
       for (const [productId, storage] of actorState.outputStorage) {
-        const name = this._getProductName(productId, economyManager);
+        const productInfo = this._getProductInfo(productId, economyManager);
         this.propertiesPanel.appendChild(
-          this._createStorageBar(`${name}: ${storage.current.toFixed(1)} / ${storage.capacity}`, storage.current, storage.capacity)
+          this._createStorageBar(
+            `${productInfo.name}: ${storage.current.toFixed(1)} / ${storage.capacity}`,
+            storage.current,
+            storage.capacity,
+            productInfo
+          )
         );
       }
     }
@@ -496,10 +506,31 @@ export class MapEditorUI {
       this.propertiesPanel.appendChild(pricesTitle);
 
       for (const [productId, price] of actorState.prices) {
-        const name = this._getProductName(productId, economyManager);
+        const productInfo = this._getProductInfo(productId, economyManager);
         const priceRow = document.createElement('div');
-        priceRow.className = 'property-row';
-        priceRow.innerHTML = `<strong>${name}:</strong> <span>$${price.toFixed(2)}</span>`;
+        priceRow.className = 'price-row';
+
+        const leftSide = document.createElement('div');
+        leftSide.className = 'price-row-left';
+
+        // Product indicator (color + icon)
+        const indicator = this._createProductIndicator(productInfo);
+        leftSide.appendChild(indicator);
+
+        // Product name
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'price-row-name';
+        nameSpan.textContent = productInfo.name;
+        leftSide.appendChild(nameSpan);
+
+        priceRow.appendChild(leftSide);
+
+        // Price value
+        const priceSpan = document.createElement('span');
+        priceSpan.className = 'price-row-value';
+        priceSpan.textContent = `$${price.toFixed(2)}`;
+        priceRow.appendChild(priceSpan);
+
         this.propertiesPanel.appendChild(priceRow);
       }
     }
@@ -519,15 +550,30 @@ export class MapEditorUI {
 
   /**
    * Create a visual storage bar element.
+   * @param {string} label - Label text
+   * @param {number} current - Current value
+   * @param {number} capacity - Maximum capacity
+   * @param {Object} productInfo - Product info with icon, color, name
    */
-  _createStorageBar(label, current, capacity) {
+  _createStorageBar(label, current, capacity, productInfo = null) {
     const container = document.createElement('div');
     container.className = 'storage-bar-container';
 
     if (label) {
       const labelEl = document.createElement('div');
       labelEl.className = 'storage-bar-label';
-      labelEl.textContent = label;
+
+      // Add product indicator if provided
+      if (productInfo) {
+        const indicator = this._createProductIndicator(productInfo);
+        labelEl.appendChild(indicator);
+      }
+
+      // Add label text
+      const textSpan = document.createElement('span');
+      textSpan.textContent = label;
+      labelEl.appendChild(textSpan);
+
       container.appendChild(labelEl);
     }
 
@@ -551,12 +597,78 @@ export class MapEditorUI {
   }
 
   /**
+   * Create a product indicator with color dot and optional icon.
+   * @param {Object} productInfo - Object with icon, color, name properties
+   */
+  _createProductIndicator(productInfo) {
+    const indicator = document.createElement('div');
+    indicator.className = 'product-indicator';
+
+    // Color dot
+    const colorDot = document.createElement('div');
+    colorDot.className = 'product-color-dot';
+    colorDot.style.backgroundColor = productInfo.color;
+    indicator.appendChild(colorDot);
+
+    // Icon (if available)
+    if (productInfo.icon) {
+      const icon = document.createElement('img');
+      icon.className = 'product-icon';
+      icon.src = productInfo.icon;
+      icon.alt = productInfo.name;
+      icon.onerror = () => {
+        // Hide icon if image fails to load
+        icon.style.display = 'none';
+      };
+      indicator.appendChild(icon);
+    }
+
+    return indicator;
+  }
+
+  /**
    * Get human-readable product name from economy manager.
    */
   _getProductName(productId, economyManager) {
     if (!economyManager) return `Product ${productId}`;
     const node = economyManager.getNode(productId);
     return node ? node.name : `Product ${productId}`;
+  }
+
+  /**
+   * Get product info including name, color, and icon.
+   * @param {number} productId
+   * @param {EconomyManager} economyManager
+   * @returns {Object} Object with name, color (CSS hex), icon (path or null)
+   */
+  _getProductInfo(productId, economyManager) {
+    const result = {
+      name: `Product ${productId}`,
+      color: '#888888',
+      icon: null
+    };
+
+    if (!economyManager) return result;
+
+    const node = economyManager.getNode(productId);
+    if (!node) return result;
+
+    result.name = node.name;
+
+    // Get color from object types
+    const objectTypeKey = `PRODUCT_${productId}`;
+    const typeDef = this.objectTypes[objectTypeKey];
+    if (typeDef && typeDef.color !== undefined) {
+      // Convert THREE.js hex color (0xff6b6b) to CSS hex color (#ff6b6b)
+      result.color = '#' + typeDef.color.toString(16).padStart(6, '0');
+    }
+
+    // Get icon from node
+    if (node.imagePath) {
+      result.icon = node.imagePath;
+    }
+
+    return result;
   }
 
   hidePropertiesPanel() {

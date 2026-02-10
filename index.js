@@ -272,12 +272,26 @@ const onMouseDown = (event) => {
   }
   
   // Try map editor interaction first
-  const handled = mapEditor.handleMouseDown(event);
-  if (handled) {
+  const result = mapEditor.handleMouseDown(event);
+  if (result.handled) {
+    // If an object was selected in VIEW mode, show the factory inspector
+    if (currentMode === 'VIEW' && result.selectedObject) {
+      const actorState = simulationEngine ? simulationEngine.getActorState(result.selectedObject.id) : null;
+      if (actorState) {
+        ui.showFactoryInspector(result.selectedObject, actorState, ui.economyEditorUI.economyManager);
+      } else {
+        ui.showPropertiesPanel(result.selectedObject);
+      }
+    }
     cameraController.handleMouseDown(event, false);
     return;
   }
-  
+
+  // Hide properties panel when clicking empty space in VIEW mode
+  if (currentMode === 'VIEW') {
+    ui.hidePropertiesPanel();
+  }
+
   // Allow camera dragging in VIEW mode, or in EDIT mode when clicking empty space
   // Also allow with Shift modifier in any mode
   if (currentMode === 'VIEW' || currentMode === 'EDIT' || event.shiftKey) {
@@ -325,8 +339,8 @@ const onContextMenu = (event) => {
     return;
   }
   
-  // Show properties panel for objects or routes in edit mode
-  if (currentMode === 'EDIT') {
+  // Show properties panel for objects or routes (in any mode)
+  if (currentMode === 'EDIT' || currentMode === 'VIEW') {
     const result = mapEditor.handleRightClick(event);
     if (result) {
       // Check if it's a route or object
