@@ -28,6 +28,17 @@ function generateColor(id) {
 // Generate ObjectTypes from an EconomyManager instance
 export function generateObjectTypesFromEconomy(economyManager) {
   const types = {};
+
+  // Always include the warehouse type
+  types['WAREHOUSE'] = {
+    name: 'Warehouse',
+    color: 0x8B4513,         // Saddle brown
+    shape: 'box',
+    size: { width: 0.9, height: 0.4, depth: 0.9 },
+    isWarehouse: true,
+    productId: null
+  };
+
   if (!economyManager) return types;
 
   const nodes = economyManager.getAllNodes();
@@ -38,6 +49,7 @@ export function generateObjectTypesFromEconomy(economyManager) {
       color: generateColor(node.id),
       shape: FACTORY_SHAPE,
       size: { ...FACTORY_SIZE },
+      isWarehouse: false,
       productId: node.id,
       imagePath: node.imagePath
     };

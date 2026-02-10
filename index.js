@@ -6,6 +6,9 @@ import { RouteManager } from './map-editor/routes.js';
 import { SaveLoadManager } from './map-editor/save-load.js';
 import { CameraController } from './map-editor/camera-controller.js';
 import { generateObjectTypesFromEconomy } from './map-editor/config/object-types.js';
+import { RandomFactoryGenerator } from './simulation/random-factory-generator.js';
+import { SimulationEngine } from './simulation/simulation-engine.js';
+import { TradeRenderer } from './simulation/trade-renderer.js';
 
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -41,6 +44,41 @@ mapEditor.getObjectManager().setTilemap(tilemap);
 const ui = new UIManager();
 ui.setRenderer(renderer); // Set renderer reference so UI can hide/show it
 const saveLoadManager = new SaveLoadManager();
+
+// Simulation engine and trade renderer (created lazily, initialized on first start)
+let simulationEngine = null;
+let tradeRenderer = null;
+
+function getOrCreateSimulationEngine() {
+  const economyManager = ui.economyEditorUI.economyManager;
+  const objectManager = mapEditor.getObjectManager();
+  if (!simulationEngine) {
+    simulationEngine = new SimulationEngine(economyManager, objectManager, routeManager, tilemap);
+    tradeRenderer = new TradeRenderer(scene, simulationEngine, tilemap);
+
+    // Live refresh of properties panel on each tick
+    simulationEngine.onTick = () => {
+      const selectedObject = mapEditor.getSelectedObject();
+      if (selectedObject && simulationEngine) {
+        const actorState = simulationEngine.getActorState(selectedObject.id);
+        if (actorState) {
+          ui.showFactoryInspector(selectedObject, actorState, ui.economyEditorUI.economyManager);
+        }
+      }
+    };
+  } else {
+    // Update references in case tilemap/mapEditor were recreated (e.g., after load)
+    simulationEngine.economyManager = economyManager;
+    simulationEngine.objectManager = objectManager;
+    simulationEngine.routeManager = routeManager;
+    simulationEngine.tilemap = tilemap;
+    if (tradeRenderer) {
+      tradeRenderer.tilemap = tilemap;
+      tradeRenderer.simulationEngine = simulationEngine;
+    }
+  }
+  return simulationEngine;
+}
 
 // Helper function to setup UI callbacks
 function setupUICallbacks(ui, mapEditor, routeManager) {
@@ -96,6 +134,34 @@ ui.onLoadEconomy = async (file) => {
   }
 };
 
+// Simulation callbacks
+const randomFactoryGenerator = new RandomFactoryGenerator();
+
+ui.onGenerateRandomFactories = () => {
+  const economyManager = ui.economyEditorUI.economyManager;
+  const objectManager = mapEditor.getObjectManager();
+  const created = randomFactoryGenerator.generate(economyManager, objectManager, tilemap);
+  console.log(`Generated ${created.length} factories`);
+};
+
+ui.onSimulationToggle = () => {
+  const engine = getOrCreateSimulationEngine();
+  if (engine.isRunning) {
+    engine.stop();
+    ui.setSimulationRunning(false);
+  } else {
+    engine.initialize();
+    engine.start();
+    ui.setSimulationRunning(true);
+  }
+};
+
+ui.onSimulationSpeedChange = (speed) => {
+  if (simulationEngine) {
+    simulationEngine.setSpeed(speed);
+  }
+};
+
 // Save/Load callbacks
 ui.onSaveGame = () => {
   try {
@@ -105,7 +171,8 @@ ui.onSaveGame = () => {
       tilemap,
       objectManager,
       routeManager,
-      economyManager
+      economyManager,
+      simulationEngine
     );
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     saveLoadManager.downloadGameState(gameStateJson, `game-save-${timestamp}.json`);
@@ -124,9 +191,20 @@ ui.onLoadGame = async (file) => {
     // Parse game state
     const gameState = await saveLoadManager.loadGameState(fileContent);
     
+    // Stop simulation and clean up trade visuals
+    if (simulationEngine) {
+      simulationEngine.stop();
+      ui.setSimulationRunning(false);
+    }
+    if (tradeRenderer) {
+      tradeRenderer.dispose();
+    }
+    simulationEngine = null;
+    tradeRenderer = null;
+
     // Clear existing scene objects (keep lights and camera)
     tilemap.clear();
-    
+
     const objectManager = mapEditor.getObjectManager();
     objectManager.clearAll();
     routeManager.clearAll();
@@ -162,9 +240,16 @@ ui.onLoadGame = async (file) => {
     routeManager.setTilemap(tilemap); // Set tilemap reference for proper positioning
     routeManager.loadFromData(gameState.routes, gameState.nextRouteId);
     
+    // Restore simulation state if present in save
+    if (gameState.simulation) {
+      const engine = getOrCreateSimulationEngine();
+      engine.loadFromData(gameState.simulation);
+      ui.setSimulationRunning(engine.isRunning);
+    }
+
     // Reset camera to default position
     cameraController.reset();
-    
+
     console.log('Game loaded successfully');
   } catch (error) {
     console.error('Failed to load game:', error);
@@ -249,8 +334,13 @@ const onContextMenu = (event) => {
         // It's a route
         ui.showRoutePropertiesPanel(result);
       } else {
-        // It's an object
-        ui.showPropertiesPanel(result);
+        // It's an object — show inspector if simulation is active, otherwise basic properties
+        const actorState = simulationEngine ? simulationEngine.getActorState(result.id) : null;
+        if (actorState) {
+          ui.showFactoryInspector(result, actorState, ui.economyEditorUI.economyManager);
+        } else {
+          ui.showPropertiesPanel(result);
+        }
       }
     } else {
       ui.hidePropertiesPanel();
@@ -311,8 +401,19 @@ window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-function animate() {
+function animate(timestamp) {
   requestAnimationFrame(animate);
+
+  // Simulation tick (fixed timestep, decoupled from frame rate)
+  if (simulationEngine) {
+    simulationEngine.update(timestamp);
+  }
+
+  // Trade renderer (smooth animation every frame)
+  if (tradeRenderer) {
+    tradeRenderer.update();
+  }
+
   renderer.render(scene, camera);
 }
 animate();

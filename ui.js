@@ -32,6 +32,9 @@ export class UIManager {
       { name: 'onLoadGame', target: 'mapEditorUI' },
       { name: 'onSaveEconomy', target: 'economyEditorUI' },
       { name: 'onLoadEconomy', target: 'economyEditorUI' },
+      { name: 'onSimulationToggle', target: 'mapEditorUI' },
+      { name: 'onSimulationSpeedChange', target: 'mapEditorUI' },
+      { name: 'onGenerateRandomFactories', target: 'mapEditorUI' },
     ]);
 
     this.init();
@@ -288,6 +291,12 @@ export class UIManager {
     }
   }
 
+  showFactoryInspector(objectData, actorState, economyManager) {
+    if (this.mapEditorUI && this.currentEditorMode === 'MAP_EDITOR') {
+      this.mapEditorUI.showFactoryInspector(objectData, actorState, economyManager);
+    }
+  }
+
   showRoutePropertiesPanel(routeData) {
     if (this.mapEditorUI && this.currentEditorMode === 'MAP_EDITOR') {
       this.mapEditorUI.showRoutePropertiesPanel(routeData);
@@ -297,6 +306,12 @@ export class UIManager {
   hidePropertiesPanel() {
     if (this.mapEditorUI) {
       this.mapEditorUI.hidePropertiesPanel();
+    }
+  }
+
+  setSimulationRunning(running) {
+    if (this.mapEditorUI) {
+      this.mapEditorUI.setSimulationRunning(running);
     }
   }
 

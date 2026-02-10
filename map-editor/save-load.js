@@ -3,11 +3,11 @@ import { SaveLoadBase } from '../utils/save-load-base.js';
 
 export class SaveLoadManager extends SaveLoadBase {
   constructor() {
-    super(1);
+    super(2); // Version 2: includes simulation state
   }
 
   // Serialize game state to JSON
-  saveGameState(tilemap, objectManager, routeManager, economyManager = null) {
+  saveGameState(tilemap, objectManager, routeManager, economyManager = null, simulationEngine = null) {
     const tileData = tilemap.getTileData();
     const mapConfig = tilemap.getConfig();
     const objectData = objectManager.serialize();
@@ -26,6 +26,11 @@ export class SaveLoadManager extends SaveLoadBase {
     // Include economy data so factories can be reconstructed on load
     if (economyManager) {
       gameState.economy = economyManager.serialize();
+    }
+
+    // Include simulation state if engine exists
+    if (simulationEngine) {
+      gameState.simulation = simulationEngine.serialize();
     }
 
     return JSON.stringify(gameState, null, 2);
