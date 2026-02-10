@@ -403,10 +403,10 @@ export class EconomyVisualizer {
     if (intersects.length > 0) {
       // Find the parent group
       let obj = intersects[0].object;
-      while (obj && !obj.userData.nodeId) {
+      while (obj && obj.userData.nodeId === undefined) {
         obj = obj.parent;
       }
-      if (obj && obj.userData.nodeId) {
+      if (obj && obj.userData.nodeId !== undefined) {
         return this.economyManager.getNode(obj.userData.nodeId);
       }
     }

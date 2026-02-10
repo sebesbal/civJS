@@ -265,7 +265,9 @@ export class EconomyEditorUI extends OrthographicViewerBase {
       nameSpan.textContent = node.name;
       nodeItem.appendChild(nameSpan);
 
-      nodeItem.addEventListener('click', () => this.selectNode(node.id));
+      nodeItem.addEventListener('click', () => {
+        this.selectNode(node.id);
+      });
 
       this.nodeList.appendChild(nodeItem);
     });
