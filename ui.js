@@ -5,6 +5,7 @@ import { FactoryOverviewUI } from './factory-overview/factory-overview-ui.js';
 import { generateObjectTypesFromEconomy } from './map-editor/config/object-types.js';
 import { ViewportControllerTest } from './test/viewport-controller-test.js';
 import { ObjectSceneTest } from './test/object-scene-test.js';
+import { SimulationTest } from './test/simulation-test.js';
 
 export class UIManager {
   constructor() {
@@ -125,7 +126,7 @@ export class UIManager {
     const testTabs = [
       { key: 'test1', label: 'ViewportController' },
       { key: 'test2', label: 'ObjectScene' },
-      { key: 'test3', label: 'Test3' },
+      { key: 'test3', label: 'Simulation' },
     ];
 
     this.testButtons = {};
@@ -163,9 +164,6 @@ export class UIManager {
       if (tab.key !== 'test1') {
         container.style.display = 'none';
       }
-      if (tab.key === 'test3') {
-        container.innerHTML = '<h1>Test 3</h1><p>This is the Test 3 interface.</p>';
-      }
       this.testEditorUI.appendChild(container);
       this.testTabContainers[tab.key] = container;
     }
@@ -173,6 +171,7 @@ export class UIManager {
     // Initialize tests
     this.viewportControllerTest = null;
     this.objectSceneTest = null;
+    this.simulationTest = null;
     // Load saved test tab from localStorage, default to 'test1'
     const savedTestTab = localStorage.getItem('lastTestTab') || 'test1';
     this.currentTestTab = savedTestTab;
@@ -199,6 +198,9 @@ export class UIManager {
     }
     if (tabName === 'test2' && !this.objectSceneTest) {
       this.objectSceneTest = new ObjectSceneTest(this.testTabContainers.test2);
+    }
+    if (tabName === 'test3' && !this.simulationTest) {
+      this.simulationTest = new SimulationTest(this.testTabContainers.test3);
     }
   }
 

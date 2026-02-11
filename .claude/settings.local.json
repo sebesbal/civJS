@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(wc:*)",
-      "Bash(ls \"e:\\\\dev\\\\civJS\\\\docs\\\\spec\"\" && ls \"e:devcivJSdocsplans\"\")"
+      "Bash(ls \"e:\\\\dev\\\\civJS\\\\docs\\\\spec\"\" && ls \"e:devcivJSdocsplans\"\")",
+      "Bash(npx serve:*)",
+      "Bash(timeout:*)",
+      "Bash(ping:*)",
+      "Bash(curl:*)",
+      "Bash(where:*)",
+      "Bash(cmd /c \"where npx 2>nul & where node 2>nul\")",
+      "Bash(cmd /c \"where npx\")",
+      "Bash(powershell:*)",
+      "Bash(python -m http.server:*)"
     ]
   }
 }

@@ -327,21 +327,32 @@ export class SimulationEngine {
     const outputStorage = sourceState.outputStorage.get(productId);
     if (!outputStorage || outputStorage.current < 1) return;
 
-    const amount = Math.min(Math.floor(outputStorage.current), 5); // Max 5 units per trip
-    if (amount <= 0) return;
-
     // Consume fuel from source
     const fuelProductId = this.economyManager.getFuelProductId();
+    let fuelStorage = null;
     if (fuelProductId !== null && fuelRequired > 0) {
       // Try output storage first, then input storage
-      const fuelStorage = sourceState.outputStorage.get(fuelProductId) ||
-                         sourceState.inputStorage.get(fuelProductId);
+      fuelStorage = sourceState.outputStorage.get(fuelProductId) ||
+                    sourceState.inputStorage.get(fuelProductId);
       if (!fuelStorage || fuelStorage.current < fuelRequired) {
         return; // Not enough fuel, abort trade
       }
-      fuelStorage.current -= fuelRequired;
     }
 
+    // When product IS the fuel, both deductions come from the same storage.
+    // Reserve fuel first, then compute trade amount from what remains.
+    let available = outputStorage.current;
+    if (fuelStorage === outputStorage && fuelRequired > 0) {
+      available -= fuelRequired;
+      if (available < 1) return;
+    }
+
+    const amount = Math.min(Math.floor(available), 5); // Max 5 units per trip
+    if (amount <= 0) return;
+
+    if (fuelStorage && fuelRequired > 0) {
+      fuelStorage.current -= fuelRequired;
+    }
     outputStorage.current -= amount;
 
     const trader = {
