@@ -401,9 +401,37 @@ export class SimulationEngine {
 
   // --- Phase 4: Pricing ---
 
-  _updateAllPrices() {
+  /**
+   * Compute market-average sell prices per product across all actors with stock.
+   * @returns {Map<number, number>} productId → average sell price
+   */
+  _computeMarketPrices() {
+    const sums = new Map();  // productId → { total, count }
     for (const state of this.actorStates.values()) {
-      state.updatePrices();
+      for (const [productId, storage] of state.outputStorage) {
+        if (storage.current > 0) {
+          const price = state.getSellPrice(productId);
+          const entry = sums.get(productId);
+          if (entry) {
+            entry.total += price;
+            entry.count++;
+          } else {
+            sums.set(productId, { total: price, count: 1 });
+          }
+        }
+      }
+    }
+    const marketPrices = new Map();
+    for (const [productId, { total, count }] of sums) {
+      marketPrices.set(productId, total / count);
+    }
+    return marketPrices;
+  }
+
+  _updateAllPrices() {
+    const marketPrices = this._computeMarketPrices();
+    for (const state of this.actorStates.values()) {
+      state.updatePrices(marketPrices);
     }
   }
 
@@ -480,6 +508,16 @@ export class SimulationEngine {
 
     // Restore active traders
     this.activeTraders = data.activeTraders ?? [];
+
+    // Recover missing recipes from economy for old saves
+    for (const state of this.actorStates.values()) {
+      if (state.type === 'PRODUCER' && state.recipe.length === 0 && state.productId !== null) {
+        const node = this.economyManager.getNode(state.productId);
+        if (node && node.inputs.length > 0) {
+          state.recipe = node.inputs.map(inp => ({ productId: inp.productId, amount: inp.amount }));
+        }
+      }
+    }
 
     // Recompute road tiles
     this.roadTiles = computeRoadTiles(this.routeManager, this.tilemap);

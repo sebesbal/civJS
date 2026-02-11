@@ -21,8 +21,11 @@ export class ActorState {
     this.isProducing = false;
     this.status = 'idle';           // 'idle' | 'producing' | 'output_full' | 'missing_inputs'
 
+    // Recipe: array of {productId, amount} — populated for processors
+    this.recipe = [];
+
     // Pricing
-    this.basePrice = 10.0;
+    this.basePrice = 1.0;
     this.prices = new Map(); // Map<productId, number>
   }
 
@@ -33,6 +36,9 @@ export class ActorState {
   initializeProducerStorage(economyManager, inputCapacity = 20, outputCapacity = 20) {
     const node = economyManager.getNode(this.productId);
     if (!node) return;
+
+    // Store recipe for cost-based pricing
+    this.recipe = node.inputs.map(inp => ({ productId: inp.productId, amount: inp.amount }));
 
     // Input storage: one slot per recipe input
     for (const input of node.inputs) {
@@ -114,39 +120,64 @@ export class ActorState {
 
   /**
    * Calculate the price for a product based on storage fill level.
-   * Below ideal → price rises (up to 2x base). Above ideal → price drops (down to 0.5x base).
+   * Above ideal → price drops to 25% of base. Below ideal → price rises up to 5x base (no hard cap).
+   * Floor: 1
    */
   static calculatePrice(basePrice, current, capacity, ideal) {
-    if (capacity <= 0) return basePrice;
+    if (capacity <= 0) return Math.max(basePrice, 1);
     const fillRatio = current / capacity;
     const idealRatio = ideal / capacity;
 
+    let price;
     if (fillRatio >= idealRatio) {
-      // Above ideal: price drops from 1.0 to 0.5
+      // Above ideal: price drops to 25% of base
       const denom = 1.0 - idealRatio;
-      const t = denom > 0 ? (fillRatio - idealRatio) / denom : 0;
-      return basePrice * (1.0 - 0.5 * Math.min(t, 1.0));
+      const t = denom > 0 ? Math.min((fillRatio - idealRatio) / denom, 1.0) : 0;
+      price = basePrice * (1.0 - 0.75 * t);
     } else {
-      // Below ideal: price rises from 1.0 to 2.0
-      const t = idealRatio > 0 ? (idealRatio - fillRatio) / idealRatio : 0;
-      return basePrice * (1.0 + 1.0 * Math.min(t, 1.0));
+      // Below ideal: price rises up to 5x base
+      const t = idealRatio > 0 ? Math.min((idealRatio - fillRatio) / idealRatio, 1.0) : 0;
+      price = basePrice * (1.0 + 4.0 * t);
     }
+    return Math.max(price, 1);
   }
 
   /**
-   * Recalculate all prices based on current storage levels.
+   * Recalculate all prices based on current storage levels and market prices.
+   * Processors derive output base price from input costs (20% markup).
+   * @param {Map<number, number>} [marketPrices] - average sell prices per product across all actors
    */
-  _recalculatePrices() {
+  _recalculatePrices(marketPrices) {
+    const isProcessor = this.recipe.length > 0;
+    const recipeInputIds = new Set(this.recipe.map(r => r.productId));
+
+    // Determine output base price
+    let outputBase = this.basePrice;
+    if (isProcessor && marketPrices) {
+      // Cost = sum of (recipe input amount * market price of that input)
+      let cost = 0;
+      for (const inp of this.recipe) {
+        cost += inp.amount * (marketPrices.get(inp.productId) ?? 1);
+      }
+      outputBase = Math.max(cost * 1.2, 1); // 20% markup, floor 1
+    }
+
     // Price for output products (sell price)
     for (const [productId, storage] of this.outputStorage) {
       this.prices.set(productId, ActorState.calculatePrice(
-        this.basePrice, storage.current, storage.capacity, storage.ideal
+        outputBase, storage.current, storage.capacity, storage.ideal
       ));
     }
-    // Price for input products (buy price) — based on how empty the input is
+
+    // Price for input products (buy price)
     for (const [productId, storage] of this.inputStorage) {
+      let inputBase = this.basePrice;
+      if (isProcessor && marketPrices && recipeInputIds.has(productId)) {
+        // Use market price as buy base for recipe inputs
+        inputBase = marketPrices.get(productId) ?? this.basePrice;
+      }
       this.prices.set(productId, ActorState.calculatePrice(
-        this.basePrice, storage.current, storage.capacity, storage.ideal
+        inputBase, storage.current, storage.capacity, storage.ideal
       ));
     }
   }
@@ -155,21 +186,22 @@ export class ActorState {
    * Get the sell price for a product (from output storage).
    */
   getSellPrice(productId) {
-    return this.prices.get(productId) ?? this.basePrice;
+    return this.prices.get(productId) ?? 1;
   }
 
   /**
    * Get the buy price for a product (from input storage — inverse logic: low stock = high willingness to pay).
    */
   getBuyPrice(productId) {
-    return this.prices.get(productId) ?? this.basePrice;
+    return this.prices.get(productId) ?? 1;
   }
 
   /**
    * Recalculate all prices. Call this after storage changes.
+   * @param {Map<number, number>} [marketPrices] - average sell prices per product
    */
-  updatePrices() {
-    this._recalculatePrices();
+  updatePrices(marketPrices) {
+    this._recalculatePrices(marketPrices);
   }
 
   // --- Serialization ---
@@ -185,7 +217,8 @@ export class ActorState {
       productionProgress: this.productionProgress,
       isProducing: this.isProducing,
       status: this.status,
-      basePrice: this.basePrice
+      basePrice: this.basePrice,
+      recipe: this.recipe
     };
   }
 
@@ -197,7 +230,8 @@ export class ActorState {
     state.productionProgress = data.productionProgress ?? 0.0;
     state.isProducing = data.isProducing ?? false;
     state.status = data.status ?? 'idle';
-    state.basePrice = data.basePrice ?? 10.0;
+    state.basePrice = 1.0;
+    state.recipe = data.recipe ?? [];
     state._recalculatePrices();
     return state;
   }
