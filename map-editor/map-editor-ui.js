@@ -196,7 +196,7 @@ export class MapEditorUI {
     speedSlider.type = 'range';
     speedSlider.className = 'speed-slider';
     speedSlider.min = '0.5';
-    speedSlider.max = '100';
+    speedSlider.max = '40';
     speedSlider.step = '0.5';
     speedSlider.value = '1';
     speedSlider.addEventListener('input', (e) => {

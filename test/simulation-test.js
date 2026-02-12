@@ -6,6 +6,7 @@ import { EconomyManager } from '../economy-editor/economy-manager.js';
 import { generateObjectTypesFromEconomy } from '../map-editor/config/object-types.js';
 import { RandomFactoryGenerator } from '../simulation/random-factory-generator.js';
 import { SimulationEngine } from '../simulation/simulation-engine.js';
+import { FactoryOverviewAggregator } from '../factory-overview/factory-overview-aggregator.js';
 
 export class SimulationTest {
   constructor(container) {
@@ -21,6 +22,8 @@ export class SimulationTest {
     this.tickTarget = 1000;
     this.tickBatch = 10; // ticks per animation frame
     this.logLines = [];
+    this.runtimeStatsByProduct = new Map();
+    this.runtimeProductIds = [];
 
     this.init();
   }
@@ -135,6 +138,23 @@ export class SimulationTest {
       this.economyManager, this.objectManager, stubRouteManager, this.tilemap
     );
     this.simulationEngine.initialize();
+
+    // Initialize runtime metrics tracking per product
+    const nodes = this.economyManager.getAllNodes();
+    this.runtimeProductIds = nodes.map(n => n.id);
+    this.runtimeStatsByProduct.clear();
+    for (const id of this.runtimeProductIds) {
+      this.runtimeStatsByProduct.set(id, {
+        producingTicks: 0,
+        totalFactoryTicks: 0,
+        activeTransporterCountSum: 0,
+        activeTransporterTickSamples: 0,
+        routeLengthSum: 0,
+        transportCostSum: 0,
+        fuelCostSum: 0,
+        transportSamples: 0
+      });
+    }
   }
 
   async runTest() {
@@ -159,6 +179,7 @@ export class SimulationTest {
         const batch = Math.min(this.tickBatch, this.tickTarget - ticksDone);
         for (let i = 0; i < batch; i++) {
           this.simulationEngine.tick();
+          this._sampleRuntimeStats();
           ticksDone++;
         }
         // Progress update every 50 ticks
@@ -189,10 +210,48 @@ export class SimulationTest {
     this.runBtn.textContent = 'Run Test';
   }
 
+  _sampleRuntimeStats() {
+    const allStates = this.simulationEngine.getAllActorStates();
+
+    for (const state of allStates) {
+      if (state.type !== 'PRODUCER' || state.productId === null) continue;
+      const entry = this.runtimeStatsByProduct.get(state.productId);
+      if (!entry) continue;
+      entry.totalFactoryTicks += 1;
+      if (state.status === 'producing') {
+        entry.producingTicks += 1;
+      }
+    }
+
+    const activeCounts = new Map();
+    for (const trader of this.simulationEngine.getActiveTraders()) {
+      const entry = this.runtimeStatsByProduct.get(trader.productId);
+      if (!entry) continue;
+
+      activeCounts.set(trader.productId, (activeCounts.get(trader.productId) || 0) + 1);
+
+      const metrics = this.simulationEngine.getPathMetrics(trader.path);
+      entry.routeLengthSum += metrics.routeLength;
+      entry.transportCostSum += metrics.transportCost;
+      entry.fuelCostSum += metrics.fuelCost;
+      entry.transportSamples += 1;
+    }
+
+    for (const productId of this.runtimeProductIds) {
+      const entry = this.runtimeStatsByProduct.get(productId);
+      if (!entry) continue;
+      entry.activeTransporterCountSum += activeCounts.get(productId) || 0;
+      entry.activeTransporterTickSamples += 1;
+    }
+  }
+
   evaluateResults() {
     this.log('--- Results ---');
     const nodes = this.economyManager.getAllNodes();
     const allStates = this.simulationEngine.getAllActorStates();
+    const overviewAggregator = new FactoryOverviewAggregator();
+    overviewAggregator.aggregate(this.simulationEngine, this.economyManager);
+    const overviewStats = overviewAggregator.getStats();
 
     const results = [];
     let rawCount = 0, rawPassed = 0;
@@ -211,7 +270,6 @@ export class SimulationTest {
         totalProducedCount += state.totalProduced;
       }
 
-      // Count product in other actors' input storage (delivered and waiting to be consumed)
       let totalDelivered = 0;
       for (const state of allStates) {
         if (state.productId === node.id) continue;
@@ -220,13 +278,11 @@ export class SimulationTest {
       }
 
       const isRaw = node.inputs.length === 0;
-      // A product counts as "produced" if it has stock, was delivered somewhere, or was ever produced (sinks)
       const produced = totalOutput > 0 || totalDelivered > 0 || totalProducedCount > 0;
 
       if (isRaw) { rawCount++; if (produced) rawPassed++; }
       else { processedCount++; if (produced) processedPassed++; }
 
-      // Get average sell price
       let avgPrice = 0;
       let priceCount = 0;
       for (const state of producers) {
@@ -235,21 +291,56 @@ export class SimulationTest {
       }
       avgPrice = priceCount > 0 ? avgPrice / priceCount : 0;
 
+      const ov = overviewStats.get(node.id) || {
+        avgInputFillPct: 0,
+        avgOutputFillPct: 0
+      };
+      const rt = this.runtimeStatsByProduct.get(node.id) || {
+        producingTicks: 0,
+        totalFactoryTicks: 0,
+        activeTransporterCountSum: 0,
+        activeTransporterTickSamples: 0,
+        routeLengthSum: 0,
+        transportCostSum: 0,
+        fuelCostSum: 0,
+        transportSamples: 0
+      };
+
+      const uptimePct = rt.totalFactoryTicks > 0
+        ? (rt.producingTicks / rt.totalFactoryTicks) * 100
+        : 0;
+      const avgActiveTransporters = rt.activeTransporterTickSamples > 0
+        ? rt.activeTransporterCountSum / rt.activeTransporterTickSamples
+        : 0;
+      const avgRouteLength = rt.transportSamples > 0 ? rt.routeLengthSum / rt.transportSamples : 0;
+      const avgTransportCost = rt.transportSamples > 0 ? rt.transportCostSum / rt.transportSamples : 0;
+      const avgFuelCost = rt.transportSamples > 0 ? rt.fuelCostSum / rt.transportSamples : 0;
+
       results.push({
         id: node.id, name: node.name, isRaw,
         factories: producers.length, producing: producingCount,
-        stock: totalOutput.toFixed(1), delivered: totalDelivered.toFixed(1),
+        uptimePct: `${uptimePct.toFixed(1)}%`,
+        avgInputFillPct: `${((ov.avgInputFillPct || 0) * 100).toFixed(1)}%`,
+        avgOutputFillPct: `${((ov.avgOutputFillPct || 0) * 100).toFixed(1)}%`,
+        avgPrice: Math.round(avgPrice),
+        avgActiveTransporters: avgActiveTransporters.toFixed(2),
+        avgRouteLength: avgRouteLength.toFixed(2),
+        avgTransportCost: avgTransportCost.toFixed(2),
+        avgFuelCost: avgFuelCost.toFixed(2),
+        stock: totalOutput.toFixed(1),
+        delivered: totalDelivered.toFixed(1),
         totalProduced: totalProducedCount,
-        avgPrice: Math.round(avgPrice), passed: produced
+        passed: produced
       });
 
       const status = produced ? 'PASS' : 'FAIL';
-      this.log(`  [${status}] ${node.name} (id=${node.id}): stock=${totalOutput.toFixed(1)}, delivered=${totalDelivered.toFixed(1)}, produced=${totalProducedCount}, price=${Math.round(avgPrice)}, producing=${producingCount}/${producers.length}`);
+      this.log(
+        `  [${status}] ${node.name} (id=${node.id}): stock=${totalOutput.toFixed(1)}, delivered=${totalDelivered.toFixed(1)}, produced=${totalProducedCount}, ` +
+        `price=${Math.round(avgPrice)}, producing=${producingCount}/${producers.length}, uptime=${uptimePct.toFixed(1)}%, ` +
+        `avgRoute=${avgRouteLength.toFixed(2)}, avgTransCost=${avgTransportCost.toFixed(2)}, avgFuelCost=${avgFuelCost.toFixed(2)}`
+      );
     }
 
-    // Pass criteria:
-    // 1. All raw materials must produce
-    // 2. All processed goods must produce
     const rawOk = rawPassed === rawCount;
     const processedOk = processedPassed === processedCount;
 
@@ -272,16 +363,35 @@ export class SimulationTest {
     const table = document.createElement('table');
     table.style.cssText = 'border-collapse: collapse; width: 100%; font-size: 13px;';
 
-    // Overall status banner
     const banner = document.createElement('div');
     banner.textContent = allPassed ? 'ALL PASSED' : 'SOME FAILED';
     banner.style.cssText = `padding: 8px 12px; font-weight: bold; font-size: 14px; margin-bottom: 8px; color: #fff; background: ${allPassed ? '#2a6' : '#c44'};`;
     this.resultsDiv.appendChild(banner);
 
+    const headerDefs = [
+      { label: '', title: 'Per-product pass/fail status.' },
+      { label: 'Product', title: 'Product name and ID.' },
+      { label: 'Type', title: 'Raw material or processed product.' },
+      { label: 'Factories', title: 'Number of factories producing this product type.' },
+      { label: 'Producing', title: 'Factories currently producing at end of run.' },
+      { label: 'Uptime %', title: 'Percent of sampled factory-ticks spent in producing state during the run.' },
+      { label: 'Avg In %', title: 'Average input storage fill percentage for this product type.' },
+      { label: 'Avg Out %', title: 'Average output storage fill percentage for this product type.' },
+      { label: 'Avg Price', title: 'Average sell price across factories of this product type at end of run.' },
+      { label: 'Avg Active Tr', title: 'Average number of active traders carrying this product over time.' },
+      { label: 'Avg Route Len', title: 'Average route length (tiles/steps) for active transports of this product.' },
+      { label: 'Avg Transport Cost', title: 'Average transport cost per active transport sample for this product.' },
+      { label: 'Avg Fuel Cost', title: 'Average fuel cost per active transport sample for this product.' },
+      { label: 'Stock', title: 'Total output stock currently in producer output storage.' },
+      { label: 'Delivered', title: 'Total amount currently sitting in other actors input storage.' },
+      { label: 'Produced', title: 'Total units produced over the run.' }
+    ];
+
     const headerRow = table.insertRow();
-    for (const col of ['', 'Product', 'Type', 'Factories', 'Producing', 'Stock', 'Delivered', 'Produced', 'Avg Price']) {
+    for (const { label, title } of headerDefs) {
       const th = document.createElement('th');
-      th.textContent = col;
+      th.textContent = label;
+      th.title = title;
       th.style.cssText = 'text-align: left; padding: 4px 8px; border-bottom: 1px solid #555; color: #aaa;';
       headerRow.appendChild(th);
     }
@@ -296,10 +406,17 @@ export class SimulationTest {
         r.isRaw ? 'Raw' : 'Processed',
         r.factories,
         r.producing,
+        r.uptimePct,
+        r.avgInputFillPct,
+        r.avgOutputFillPct,
+        r.avgPrice,
+        r.avgActiveTransporters,
+        r.avgRouteLength,
+        r.avgTransportCost,
+        r.avgFuelCost,
         r.stock,
         r.delivered,
-        r.totalProduced,
-        r.avgPrice
+        r.totalProduced
       ];
 
       for (const val of cells) {
