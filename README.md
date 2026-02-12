@@ -2,6 +2,24 @@
 
 This is a three JS project. It's a strategic game, a bit mix of Railroad Tycoon 3 and Civilization.
 
+## Smoke tests (Playwright)
+
+Prerequisites:
+- Node.js 20+
+
+Install and run:
+```powershell
+npm install
+npx playwright install chrome
+npm run test:smoke
+```
+
+Useful variants:
+```powershell
+npm run test:smoke:headed
+npm run test:smoke:ui
+```
+
 ## Map
 The map is a grid. 
 
