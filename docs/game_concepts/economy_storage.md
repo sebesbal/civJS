@@ -12,11 +12,7 @@ As a result, the economy can be treated as a collection of local solutions that 
 
 ## Producers
 
-Producers maintain a small internal stock of the input products they need for production.
-
-The ideal size of this stock depends on how much the supply of those inputs fluctuates. If incoming deliveries are irregular, a larger buffer is required to keep production running smoothly.
-
-Producers also need storage for their output products, since these may not be sellable immediately.
+Producers maintain a small internal stock of the input and output products.
 
 ## Warehouses
 
@@ -30,10 +26,41 @@ As with producers, the ideal stock size depends on fluctuations in incoming and 
 
 When a new warehouse is built, it first examines nearby trade routes, including the types of products being transported and their typical volumes. Based on this information, it decides which products to store and in what quantities.
 
-## Prices and Storage
+## Profit margin
+
+Each actor operates with a default profit margin of 5%. This value can be changed by the user.
+
+## Ideal storage range
+
+The ideal storage range is calculated as follows:
+
+- The range size is fixed:
+  - `ideal_range_size = max - min` (for example, 3).
+- The ideal storage range is adjusted so that "storage becomes empty" and "storage becomes full" happen with the same probability.
+  - If the storage becomes empty, shift the center of the ideal range slightly upward.
+  - If the storage becomes full, shift the center of the ideal range slightly downward.
+- The initial ideal storage range is `0..ideal_range_size` for both input and output products.
+- In the following, "below ideal" and "above ideal" mean the storage level is outside the ideal range.
+
+## Prices
 
 Producers and warehouses set selling prices for their output products.
 
-These prices depend on how close the current stock level is to the ideal stock level. If storage is close to full, prices tend to drop. If stock is low, prices tend to rise.
+Terms:
 
-They also decide whether to buy input products from other producers or warehouses based on the prices currently available.
+- **Price**: an integer. The minimum price is 1. There is no upper limit.
+- **Minimum input price**: the lowest available price at which the actor can buy a product. This equals another actor’s selling price (possibly in another cell) plus transportation cost.
+
+Selling price calculation (priority order, earlier rules override later ones):
+
+- **Warehouses**: the selling price must always be higher than the minimum buying price plus the profit margin.
+- **Producers**: the selling price must always be higher than the minimum production cost plus the profit margin.
+  - Minimum production cost = sum of the required input product costs to produce one output unit, using minimum input prices.
+- The selling price is lowered when the output storage level is above ideal.
+- The selling price is increased when the output storage level is below ideal.
+
+## Pausing production, pausing selling and buying
+
+- If the current storage level of a product is above ideal, the actor does not buy that product.
+    - If this product is an output product of a producer, then production is also paused.
+
