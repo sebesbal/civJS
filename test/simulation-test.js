@@ -217,11 +217,13 @@ export class SimulationTest {
       const producers = allStates.filter(s => s.type === 'PRODUCER' && s.productId === node.id);
       let totalOutput = 0;
       let producingCount = 0;
+      let totalProducedCount = 0;
 
       for (const state of producers) {
         const outStorage = state.outputStorage.get(node.id);
         if (outStorage) totalOutput += outStorage.current;
         if (state.status === 'producing') producingCount++;
+        totalProducedCount += state.totalProduced;
       }
 
       // Count product in other actors' input storage (delivered and waiting to be consumed)
@@ -233,7 +235,8 @@ export class SimulationTest {
       }
 
       const isRaw = node.inputs.length === 0;
-      const produced = totalOutput > 0 || totalDelivered > 0;
+      // A product counts as "produced" if it has stock, was delivered somewhere, or was ever produced (sinks)
+      const produced = totalOutput > 0 || totalDelivered > 0 || totalProducedCount > 0;
 
       if (isRaw) { rawCount++; if (produced) rawPassed++; }
       else { processedCount++; if (produced) processedPassed++; }
@@ -251,11 +254,12 @@ export class SimulationTest {
         id: node.id, name: node.name, isRaw,
         factories: producers.length, producing: producingCount,
         stock: totalOutput.toFixed(1), delivered: totalDelivered.toFixed(1),
-        avgPrice: avgPrice.toFixed(2), passed: produced
+        totalProduced: totalProducedCount,
+        avgPrice: Math.round(avgPrice), passed: produced
       });
 
       const status = produced ? 'PASS' : 'FAIL';
-      this.log(`  [${status}] ${node.name} (id=${node.id}): stock=${totalOutput.toFixed(1)}, delivered=${totalDelivered.toFixed(1)}, price=${avgPrice.toFixed(2)}, producing=${producingCount}/${producers.length}`);
+      this.log(`  [${status}] ${node.name} (id=${node.id}): stock=${totalOutput.toFixed(1)}, delivered=${totalDelivered.toFixed(1)}, produced=${totalProducedCount}, price=${Math.round(avgPrice)}, producing=${producingCount}/${producers.length}`);
     }
 
     // Pass criteria:
@@ -265,8 +269,8 @@ export class SimulationTest {
     const rawOk = rawPassed === rawCount;
     const processedOk = processedPassed >= Math.ceil(processedCount / 2);
 
-    const rawAvgPrice = results.filter(r => r.isRaw && r.passed).reduce((s, r) => s + parseFloat(r.avgPrice), 0) / Math.max(rawPassed, 1);
-    const procAvgPrice = results.filter(r => !r.isRaw && r.passed).reduce((s, r) => s + parseFloat(r.avgPrice), 0) / Math.max(processedPassed, 1);
+    const rawAvgPrice = results.filter(r => r.isRaw && r.passed).reduce((s, r) => s + r.avgPrice, 0) / Math.max(rawPassed, 1);
+    const procAvgPrice = results.filter(r => !r.isRaw && r.passed).reduce((s, r) => s + r.avgPrice, 0) / Math.max(processedPassed, 1);
     const priceOk = processedPassed === 0 || procAvgPrice > rawAvgPrice;
 
     const allPassed = rawOk && processedOk && priceOk;
@@ -274,7 +278,7 @@ export class SimulationTest {
     this.log(`--- Checks ---`);
     this.log(`  Raw materials: ${rawPassed}/${rawCount} ${rawOk ? 'OK' : 'FAIL'}`);
     this.log(`  Processed goods: ${processedPassed}/${processedCount} (need ${Math.ceil(processedCount / 2)}) ${processedOk ? 'OK' : 'FAIL'}`);
-    this.log(`  Price cascade: raw avg=${rawAvgPrice.toFixed(2)}, processed avg=${procAvgPrice.toFixed(2)} ${priceOk ? 'OK' : 'FAIL'}`);
+    this.log(`  Price cascade: raw avg=${Math.round(rawAvgPrice)}, processed avg=${Math.round(procAvgPrice)} ${priceOk ? 'OK' : 'FAIL'}`);
     this.log(allPassed ? '=== TEST PASSED ===' : '=== TEST FAILED ===');
 
     this.renderResultsTable(results, allPassed);
@@ -291,7 +295,7 @@ export class SimulationTest {
     this.resultsDiv.appendChild(banner);
 
     const headerRow = table.insertRow();
-    for (const col of ['', 'Product', 'Type', 'Factories', 'Producing', 'Stock', 'Delivered', 'Avg Price']) {
+    for (const col of ['', 'Product', 'Type', 'Factories', 'Producing', 'Stock', 'Delivered', 'Produced', 'Avg Price']) {
       const th = document.createElement('th');
       th.textContent = col;
       th.style.cssText = 'text-align: left; padding: 4px 8px; border-bottom: 1px solid #555; color: #aaa;';
@@ -310,6 +314,7 @@ export class SimulationTest {
         r.producing,
         r.stock,
         r.delivered,
+        r.totalProduced,
         r.avgPrice
       ];
 

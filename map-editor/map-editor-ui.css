@@ -382,12 +382,24 @@
   background: rgba(255, 255, 255, 0.1);
   border-radius: 6px;
   overflow: hidden;
+  position: relative;
 }
 
 .storage-bar-inner {
   height: 100%;
   border-radius: 6px;
   transition: width 0.3s ease;
+}
+
+.storage-bar-ideal-range {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-left: 2px solid rgba(255, 255, 255, 0.6);
+  border-right: 2px solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+  box-sizing: border-box;
 }
 
 /* Inspector section headers */

@@ -11,7 +11,21 @@
       "Bash(cmd /c \"where npx 2>nul & where node 2>nul\")",
       "Bash(cmd /c \"where npx\")",
       "Bash(powershell:*)",
-      "Bash(python -m http.server:*)"
+      "Bash(python -m http.server:*)",
+      "Bash(cmd /c \"cd /d E:\\\\dev\\\\civJS && npx serve -l 3000 --no-clipboard\")",
+      "Bash(cmd /c \"ping -n 4 127.0.0.1 >nul\")",
+      "Bash(cmd /c \"ping -n 5 127.0.0.1 >nul && type C:\\\\Users\\\\sebes\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\E--dev-civJS\\\\tasks\\\\bfa4ff7.output\")",
+      "Bash(cmd /c \"ping -n 10 127.0.0.1 >nul && type C:\\\\Users\\\\sebes\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\E--dev-civJS\\\\tasks\\\\bfa4ff7.output\")",
+      "Bash(cmd /c \"cd /d E:\\\\dev\\\\civJS && python -m http.server 3000\")",
+      "Bash(cmd /c \"ping -n 3 127.0.0.1 >nul && type C:\\\\Users\\\\sebes\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\E--dev-civJS\\\\tasks\\\\b907b6a.output\")",
+      "Bash(cmd /c \"ping -n 5 127.0.0.1 >nul && type C:\\\\Users\\\\sebes\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\E--dev-civJS\\\\tasks\\\\b907b6a.output\")",
+      "Bash(cmd /c \"netstat -an | findstr :3000\")",
+      "Bash(cmd /c \"netstat -an | findstr LISTENING | findstr 300\")",
+      "Bash(cmd /c \"start /B powershell -ExecutionPolicy Bypass -File E:\\\\dev\\\\civJS\\\\serve.ps1\")",
+      "Bash(cmd /c \"ping -n 3 127.0.0.1 >nul && curl -s -o nul -w %%{http_code} http://localhost:3000/\")",
+      "Bash(cmd /c \"ping -n 5 127.0.0.1 >nul && netstat -an | findstr 3000\")",
+      "Bash(powershell.exe:*)",
+      "Bash(cmd /c \"ping -n 4 127.0.0.1 >nul && netstat -an | findstr 3000\")"
     ]
   }
 }

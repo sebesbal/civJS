@@ -194,7 +194,7 @@ export class FactoryOverviewVisualizer {
     ctx.fillText(`Factories: ${stats.factoryCount}`, 16, 50);
 
     // Price
-    ctx.fillText(`Avg Price: ${stats.avgSellPrice.toFixed(1)}`, 16, 74);
+    ctx.fillText(`Avg Price: ${Math.round(stats.avgSellPrice)}`, 16, 74);
 
     // Output fill bar
     const barX = 16;
@@ -234,7 +234,7 @@ export class FactoryOverviewVisualizer {
     ctx.font = '11px Arial';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#aaaaaa';
-    ctx.fillText('P=producing  I=idle  F=full  M=missing', w / 2, h - 8);
+    ctx.fillText('P=producing I=idle F=full S=surplus M=missing', w / 2, h - 8);
   }
 
   /**
@@ -270,17 +270,19 @@ export class FactoryOverviewVisualizer {
       producing: '#2ecc71',
       idle: '#95a5a6',
       output_full: '#e74c3c',
+      output_surplus: '#e67e22',
       missing_inputs: '#f39c12'
     };
     const labels = {
       producing: 'P',
       idle: 'I',
       output_full: 'F',
+      output_surplus: 'S',
       missing_inputs: 'M'
     };
 
     let offsetX = x;
-    for (const status of ['producing', 'idle', 'output_full', 'missing_inputs']) {
+    for (const status of ['producing', 'idle', 'output_full', 'output_surplus', 'missing_inputs']) {
       const count = statusCounts[status] || 0;
       if (count === 0) continue;
       const segW = (count / total) * w;

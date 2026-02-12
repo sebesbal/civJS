@@ -199,7 +199,7 @@ export class FactoryOverviewUI extends OrthographicViewerBase {
     this._addPropertyRow('Factory Count', `${stats.factoryCount}`);
 
     // Average sell price
-    this._addPropertyRow('Avg Sell Price', `${stats.avgSellPrice.toFixed(2)}`);
+    this._addPropertyRow('Avg Sell Price', `${Math.round(stats.avgSellPrice)}`);
 
     // Output storage bar
     this._addPropertyRow('Output Storage', '');
@@ -222,6 +222,7 @@ export class FactoryOverviewUI extends OrthographicViewerBase {
       producing: 'Producing',
       idle: 'Idle',
       output_full: 'Output Full',
+      output_surplus: 'Output Above Ideal',
       missing_inputs: 'Missing Inputs'
     };
 

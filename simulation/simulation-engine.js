@@ -33,6 +33,9 @@ export class SimulationEngine {
     // Cached road tiles (recomputed on initialize)
     this.roadTiles = new Set();
 
+    // Path cache: Map<"fromId-toId", path|null>
+    this._pathCache = new Map();
+
     // Callback
     this.onTick = null;
 
@@ -50,6 +53,7 @@ export class SimulationEngine {
     this.activeTraders = [];
     this.nextTraderId = 0;
     this.tickCount = 0;
+    this._pathCache.clear();
 
     // Compute road tiles
     this.roadTiles = computeRoadTiles(this.routeManager, this.tilemap);
@@ -123,6 +127,7 @@ export class SimulationEngine {
     // Phase 2: Trading (evaluate new trades periodically)
     this._tradeEvalCounter++;
     if (this._tradeEvalCounter >= this._tradeEvalInterval) {
+      this._computeMinInputPrices();
       this._evaluateTradeOpportunities();
       this._tradeEvalCounter = 0;
     }
@@ -152,10 +157,18 @@ export class SimulationEngine {
       const isSink = state.isSink(this.economyManager);
       const outputStorage = state.outputStorage.get(state.productId);
 
-      // Check if output storage is full (unless sink — output disappears)
+      // Check if output storage is at capacity (unless sink — output disappears)
       if (!isSink && outputStorage && outputStorage.current >= outputStorage.capacity) {
         state.isProducing = false;
         state.status = 'output_full';
+        continue;
+      }
+
+      // Check if output is above ideal range — pause production (not at capacity, but surplus)
+      if (!isSink && outputStorage && outputStorage.idealMax !== undefined &&
+          outputStorage.current > outputStorage.idealMax) {
+        state.isProducing = false;
+        state.status = 'output_surplus';
         continue;
       }
 
@@ -167,11 +180,16 @@ export class SimulationEngine {
 
         if (state.productionProgress >= 1.0) {
           state.productionProgress -= 1.0;
+          state.totalProduced++;
           if (!isSink && outputStorage) {
             outputStorage.current = Math.min(
               outputStorage.current + 1,
               outputStorage.capacity
             );
+            // If we hit capacity, shift ideal range down
+            if (outputStorage.current >= outputStorage.capacity && outputStorage.idealMin !== undefined) {
+              state.shiftIdealRange(outputStorage, 'down');
+            }
           }
         }
       } else {
@@ -193,17 +211,26 @@ export class SimulationEngine {
           for (const input of node.inputs) {
             const inputStorage = state.inputStorage.get(input.productId);
             inputStorage.current -= input.amount;
+            // If input hits 0, shift ideal range up
+            if (inputStorage.current <= 0 && inputStorage.idealMin !== undefined) {
+              state.shiftIdealRange(inputStorage, 'up');
+            }
           }
 
           state.productionProgress += state.productionRate;
 
           if (state.productionProgress >= 1.0) {
             state.productionProgress -= 1.0;
+            state.totalProduced++;
             if (!isSink && outputStorage) {
               outputStorage.current = Math.min(
                 outputStorage.current + 1,
                 outputStorage.capacity
               );
+              // If we hit capacity, shift ideal range down
+              if (outputStorage.current >= outputStorage.capacity && outputStorage.idealMin !== undefined) {
+                state.shiftIdealRange(outputStorage, 'down');
+              }
             }
           }
         } else {
@@ -212,6 +239,75 @@ export class SimulationEngine {
         }
       }
     }
+  }
+
+  // --- Min Input Prices ---
+
+  /**
+   * For each producer, find the cheapest seller of each input product
+   * (seller's sell price + transport cost). Uses path cache.
+   */
+  _computeMinInputPrices() {
+    for (const buyerState of this.actorStates.values()) {
+      if (buyerState.type !== 'PRODUCER') continue;
+      buyerState.minInputPrices.clear();
+
+      for (const [inputProductId] of buyerState.inputStorage) {
+        let cheapest = Infinity;
+
+        for (const sellerState of this.actorStates.values()) {
+          if (sellerState.objectId === buyerState.objectId) continue;
+          const sellerOutput = sellerState.outputStorage.get(inputProductId);
+          if (!sellerOutput || sellerOutput.current <= 0) continue;
+
+          const sellPrice = sellerState.getSellPrice(inputProductId);
+          const transportCost = this._getTransportCost(sellerState.objectId, buyerState.objectId);
+          if (transportCost === null) continue; // no path
+
+          const totalCost = sellPrice + transportCost;
+          if (totalCost < cheapest) {
+            cheapest = totalCost;
+          }
+        }
+
+        if (cheapest < Infinity) {
+          buyerState.minInputPrices.set(inputProductId, cheapest);
+        }
+      }
+    }
+  }
+
+  /**
+   * Get transport cost between two objects (uses path cache).
+   * @returns {number|null} fuel cost, or null if no path
+   */
+  _getTransportCost(fromObjectId, toObjectId) {
+    const cacheKey = `${fromObjectId}-${toObjectId}`;
+    let path;
+
+    if (this._pathCache.has(cacheKey)) {
+      path = this._pathCache.get(cacheKey);
+    } else {
+      const fromObj = this.objectManager.getObjectById(fromObjectId);
+      const toObj = this.objectManager.getObjectById(toObjectId);
+      if (!fromObj || !toObj) {
+        this._pathCache.set(cacheKey, null);
+        return null;
+      }
+
+      const fromGrid = worldToGrid(fromObj.mesh.position.x, fromObj.mesh.position.z, this.tilemap);
+      const toGrid = worldToGrid(toObj.mesh.position.x, toObj.mesh.position.z, this.tilemap);
+      path = findPath(this.tilemap, fromGrid, toGrid, this.roadTiles);
+      this._pathCache.set(cacheKey, path);
+    }
+
+    if (!path || path.length < 2) return null;
+
+    let cost = 0;
+    for (const step of path) {
+      cost += this.roadTiles.has(`${step.gridX},${step.gridZ}`) ? 0.15 : 0.5;
+    }
+    return cost;
   }
 
   // --- Phase 2: Trade Evaluation ---
@@ -224,8 +320,13 @@ export class SimulationEngine {
     // Find all actors with output surplus
     for (const sourceState of this.actorStates.values()) {
       for (const [productId, outputStorage] of sourceState.outputStorage) {
-        // Need surplus: current > ideal
-        if (outputStorage.current <= outputStorage.ideal * 0.5) continue;
+        // Need surplus: current > idealMax (for producers) or current > ideal*0.5 (for warehouses)
+        if (outputStorage.idealMax !== undefined) {
+          if (outputStorage.current <= outputStorage.idealMax) continue;
+        } else {
+          // Warehouse fallback
+          if (outputStorage.current <= (outputStorage.ideal ?? 0) * 0.5) continue;
+        }
         // Need at least 1 unit to transport
         if (outputStorage.current < 1) continue;
 
@@ -241,15 +342,21 @@ export class SimulationEngine {
         );
         if (alreadyTrading) continue;
 
-        // Check profitability
+        // Find path (use cache)
         const sourceObj = this.objectManager.getObjectById(sourceState.objectId);
         const destObj = this.objectManager.getObjectById(buyer.state.objectId);
         if (!sourceObj || !destObj) continue;
 
-        const sourceGrid = worldToGrid(sourceObj.mesh.position.x, sourceObj.mesh.position.z, this.tilemap);
-        const destGrid = worldToGrid(destObj.mesh.position.x, destObj.mesh.position.z, this.tilemap);
-
-        const path = findPath(this.tilemap, sourceGrid, destGrid, this.roadTiles);
+        const cacheKey = `${sourceState.objectId}-${buyer.state.objectId}`;
+        let path;
+        if (this._pathCache.has(cacheKey)) {
+          path = this._pathCache.get(cacheKey);
+        } else {
+          const sourceGrid = worldToGrid(sourceObj.mesh.position.x, sourceObj.mesh.position.z, this.tilemap);
+          const destGrid = worldToGrid(destObj.mesh.position.x, destObj.mesh.position.z, this.tilemap);
+          path = findPath(this.tilemap, sourceGrid, destGrid, this.roadTiles);
+          this._pathCache.set(cacheKey, path);
+        }
         if (!path || path.length < 2) continue;
 
         // Calculate fuel consumption based on path length
@@ -268,19 +375,15 @@ export class SimulationEngine {
           }
         }
 
-        const sellPrice = sourceState.getSellPrice(productId);
-        const buyPrice = buyer.state.getBuyPrice(productId);
-
-        // Trade is profitable if buyer pays more than seller price + fuel cost
-        if (buyPrice > sellPrice + fuelRequired) {
-          this._createTrader(sourceState, buyer.state, productId, path, fuelRequired);
-        }
+        // No profitability gate — trades happen when seller has surplus and buyer has deficit.
+        // The price mechanism (raise when scarce, lower when surplus) naturally regulates flow.
+        this._createTrader(sourceState, buyer.state, productId, path, fuelRequired);
       }
     }
   }
 
   /**
-   * Find the best buyer for a product (actor that needs it most and is willing to pay most).
+   * Find the best buyer for a product (actor that needs it most).
    */
   _findBestBuyer(sourceState, productId) {
     let bestBuyer = null;
@@ -295,7 +398,11 @@ export class SimulationEngine {
 
       if (candidateState.type === 'PRODUCER') {
         storage = candidateState.inputStorage.get(productId);
-        if (storage) needsProduct = true;
+        if (storage) {
+          // Skip only if at capacity
+          if (storage.current >= storage.capacity) continue;
+          needsProduct = true;
+        }
       } else if (candidateState.type === 'WAREHOUSE') {
         storage = candidateState.outputStorage.get(productId);
         if (storage && storage.current < storage.capacity) needsProduct = true;
@@ -303,9 +410,19 @@ export class SimulationEngine {
 
       if (!needsProduct || !storage) continue;
 
-      // Score: how much space they have (deficit from ideal)
-      const deficit = storage.ideal - storage.current;
-      if (deficit <= 0) continue;
+      // Score: deficit from idealMax gives higher priority to under-stocked buyers.
+      // Buyers above idealMax still eligible but with lower score.
+      let deficit;
+      if (storage.idealMax !== undefined) {
+        deficit = storage.idealMax - storage.current;
+      } else {
+        deficit = (storage.ideal ?? storage.capacity) - storage.current;
+      }
+      // Buyers above idealMax get a small positive score based on remaining capacity
+      if (deficit <= 0) {
+        deficit = (storage.capacity - storage.current) * 0.01;
+        if (deficit <= 0) continue;
+      }
 
       // Higher deficit = higher priority
       const score = deficit / storage.capacity;
@@ -355,6 +472,11 @@ export class SimulationEngine {
     }
     outputStorage.current -= amount;
 
+    // If withdrawal empties output, shift ideal range up
+    if (outputStorage.current <= 0 && outputStorage.idealMin !== undefined) {
+      sourceState.shiftIdealRange(outputStorage, 'up');
+    }
+
     const trader = {
       id: this.nextTraderId++,
       productId,
@@ -400,6 +522,10 @@ export class SimulationEngine {
               targetStorage.current + trader.amount,
               targetStorage.capacity
             );
+            // If delivery fills to capacity, shift ideal range down
+            if (targetStorage.current >= targetStorage.capacity && targetStorage.idealMin !== undefined) {
+              destState.shiftIdealRange(targetStorage, 'down');
+            }
           }
         }
         completed.push(trader.id);
@@ -412,37 +538,9 @@ export class SimulationEngine {
 
   // --- Phase 4: Pricing ---
 
-  /**
-   * Compute market-average sell prices per product across all actors with stock.
-   * @returns {Map<number, number>} productId → average sell price
-   */
-  _computeMarketPrices() {
-    const sums = new Map();  // productId → { total, count }
-    for (const state of this.actorStates.values()) {
-      for (const [productId, storage] of state.outputStorage) {
-        if (storage.current > 0) {
-          const price = state.getSellPrice(productId);
-          const entry = sums.get(productId);
-          if (entry) {
-            entry.total += price;
-            entry.count++;
-          } else {
-            sums.set(productId, { total: price, count: 1 });
-          }
-        }
-      }
-    }
-    const marketPrices = new Map();
-    for (const [productId, { total, count }] of sums) {
-      marketPrices.set(productId, total / count);
-    }
-    return marketPrices;
-  }
-
   _updateAllPrices() {
-    const marketPrices = this._computeMarketPrices();
     for (const state of this.actorStates.values()) {
-      state.updatePrices(marketPrices);
+      state.updatePrices();
     }
   }
 
@@ -481,7 +579,7 @@ export class SimulationEngine {
 
   serialize() {
     return {
-      version: 1,
+      version: 2,
       isRunning: this._running,
       tickCount: this.tickCount,
       speed: this.speed,
@@ -530,8 +628,9 @@ export class SimulationEngine {
       }
     }
 
-    // Recompute road tiles
+    // Recompute road tiles and clear path cache
     this.roadTiles = computeRoadTiles(this.routeManager, this.tilemap);
+    this._pathCache.clear();
 
     // Restore running state
     if (data.isRunning) {

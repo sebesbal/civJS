@@ -1,5 +1,7 @@
 // ActorState - data model for factory/warehouse simulation state
 
+const DEFAULT_IDEAL_RANGE_SIZE = 3;
+
 export class ActorState {
   /**
    * @param {number} objectId - map object ID
@@ -11,7 +13,7 @@ export class ActorState {
     this.type = type;
     this.productId = productId;
 
-    // Storage: Map<productId, { current, capacity, ideal }>
+    // Storage: Map<productId, { current, capacity, idealMin, idealMax }>
     this.inputStorage = new Map();
     this.outputStorage = new Map();
 
@@ -19,14 +21,18 @@ export class ActorState {
     this.productionRate = 1.0;      // units per tick (base)
     this.productionProgress = 0.0;  // 0-1 progress toward next unit
     this.isProducing = false;
-    this.status = 'idle';           // 'idle' | 'producing' | 'output_full' | 'missing_inputs'
+    this.status = 'idle';           // 'idle' | 'producing' | 'output_full' | 'output_surplus' | 'missing_inputs'
 
     // Recipe: array of {productId, amount} — populated for processors
     this.recipe = [];
 
+    // Production counter (useful for sinks where output disappears)
+    this.totalProduced = 0;
+
     // Pricing
-    this.basePrice = 1.0;
-    this.prices = new Map(); // Map<productId, number>
+    this.profitMargin = 0.05;       // default 5%
+    this.prices = new Map();        // Map<productId, number> — integer prices
+    this.minInputPrices = new Map(); // Map<productId, number> — cheapest source price + transport
   }
 
   /**
@@ -45,7 +51,8 @@ export class ActorState {
       this.inputStorage.set(input.productId, {
         current: 0,
         capacity: inputCapacity,
-        ideal: inputCapacity * 0.5
+        idealMin: 0,
+        idealMax: DEFAULT_IDEAL_RANGE_SIZE
       });
     }
 
@@ -53,7 +60,8 @@ export class ActorState {
     this.outputStorage.set(this.productId, {
       current: 0,
       capacity: outputCapacity,
-      ideal: outputCapacity * 0.5
+      idealMin: 0,
+      idealMax: DEFAULT_IDEAL_RANGE_SIZE
     });
 
     // Add fuel storage if fuel is designated and not already in inputs/outputs
@@ -67,13 +75,14 @@ export class ActorState {
         this.inputStorage.set(fuelProductId, {
           current: 0,
           capacity: 10, // Smaller capacity for fuel
-          ideal: 5
+          idealMin: 0,
+          idealMax: DEFAULT_IDEAL_RANGE_SIZE
         });
       }
     }
 
-    // Initialize prices for all stored products
-    this._recalculatePrices();
+    // Initialize prices for all stored products (start at 1)
+    this._initializePrices();
   }
 
   /**
@@ -96,7 +105,7 @@ export class ActorState {
 
     // Warehouses already store all products, so fuel storage is included above
 
-    this._recalculatePrices();
+    this._initializePrices();
   }
 
   /**
@@ -119,66 +128,142 @@ export class ActorState {
   }
 
   /**
-   * Calculate the price for a product based on storage fill level.
-   * Above ideal → price drops to 25% of base. Below ideal → price rises up to 5x base (no hard cap).
-   * Floor: 1
+   * Shift the ideal range up or down by 1, keeping range size fixed.
+   * @param {Object} storage - storage slot {current, capacity, idealMin, idealMax}
+   * @param {'up'|'down'} direction - 'up' shifts toward capacity, 'down' shifts toward 0
    */
-  static calculatePrice(basePrice, current, capacity, ideal) {
-    if (capacity <= 0) return Math.max(basePrice, 1);
-    const fillRatio = current / capacity;
-    const idealRatio = ideal / capacity;
-
-    let price;
-    if (fillRatio >= idealRatio) {
-      // Above ideal: price drops to 25% of base
-      const denom = 1.0 - idealRatio;
-      const t = denom > 0 ? Math.min((fillRatio - idealRatio) / denom, 1.0) : 0;
-      price = basePrice * (1.0 - 0.75 * t);
-    } else {
-      // Below ideal: price rises up to 5x base
-      const t = idealRatio > 0 ? Math.min((idealRatio - fillRatio) / idealRatio, 1.0) : 0;
-      price = basePrice * (1.0 + 4.0 * t);
+  shiftIdealRange(storage, direction) {
+    if (!storage || storage.idealMin === undefined) return; // skip warehouse slots
+    const rangeSize = storage.idealMax - storage.idealMin;
+    if (direction === 'up') {
+      // Storage hit empty — shift range up (tolerate more stock)
+      if (storage.idealMax < storage.capacity) {
+        storage.idealMin += 1;
+        storage.idealMax += 1;
+      }
+    } else if (direction === 'down') {
+      // Storage hit full — shift range down (try to sell more aggressively)
+      if (storage.idealMin > 0) {
+        storage.idealMin -= 1;
+        storage.idealMax -= 1;
+      }
     }
-    return Math.max(price, 1);
+    // Clamp to valid bounds
+    storage.idealMin = Math.max(0, storage.idealMin);
+    storage.idealMax = Math.min(storage.capacity, storage.idealMax);
+    // Ensure range size is preserved
+    if (storage.idealMax - storage.idealMin < rangeSize) {
+      if (direction === 'up') {
+        storage.idealMin = Math.max(0, storage.idealMax - rangeSize);
+      } else {
+        storage.idealMax = Math.min(storage.capacity, storage.idealMin + rangeSize);
+      }
+    }
   }
 
   /**
-   * Recalculate all prices based on current storage levels and market prices.
-   * Processors derive output base price from input costs (20% markup).
-   * @param {Map<number, number>} [marketPrices] - average sell prices per product across all actors
+   * Initialize all prices to 1 (integer).
    */
-  _recalculatePrices(marketPrices) {
-    const isProcessor = this.recipe.length > 0;
-    const recipeInputIds = new Set(this.recipe.map(r => r.productId));
+  _initializePrices() {
+    for (const [productId] of this.outputStorage) {
+      this.prices.set(productId, 1);
+    }
+    for (const [productId] of this.inputStorage) {
+      if (!this.prices.has(productId)) {
+        this.prices.set(productId, 1);
+      }
+    }
+  }
 
-    // Determine output base price
-    let outputBase = this.basePrice;
-    if (isProcessor && marketPrices) {
-      // Cost = sum of (recipe input amount * market price of that input)
+  /**
+   * Adjust the output price for a product based on storage vs ideal range.
+   * +1 if storage < idealMin (scarce), -1 if storage > idealMax (surplus).
+   * Clamp to priceFloor.
+   */
+  adjustOutputPrice(productId, priceFloor) {
+    const storage = this.outputStorage.get(productId);
+    if (!storage) return;
+
+    let price = this.prices.get(productId) ?? 1;
+
+    if (storage.current > storage.idealMax) {
+      price -= 1;
+    } else if (storage.current < storage.idealMin) {
+      price += 1;
+    }
+
+    price = Math.max(price, priceFloor);
+    this.prices.set(productId, price);
+  }
+
+  /**
+   * Recalculate all prices. Producers use integer incremental pricing.
+   * Warehouses keep the old continuous pricing for now.
+   */
+  updatePrices() {
+    if (this.type === 'WAREHOUSE') {
+      this._updateWarehousePrices();
+      return;
+    }
+
+    // --- Producer pricing ---
+    const isProcessor = this.recipe.length > 0;
+
+    // Compute price floor from recipe inputs + profit margin
+    let priceFloor = 1;
+    if (isProcessor) {
       let cost = 0;
       for (const inp of this.recipe) {
-        cost += inp.amount * (marketPrices.get(inp.productId) ?? 1);
+        const minPrice = this.minInputPrices.get(inp.productId) ?? 1;
+        cost += inp.amount * minPrice;
       }
-      outputBase = Math.max(cost * 1.2, 1); // 20% markup, floor 1
+      priceFloor = Math.ceil(cost * (1 + this.profitMargin));
+      priceFloor = Math.max(priceFloor, 1);
     }
 
-    // Price for output products (sell price)
-    for (const [productId, storage] of this.outputStorage) {
-      this.prices.set(productId, ActorState.calculatePrice(
-        outputBase, storage.current, storage.capacity, storage.ideal
-      ));
+    // Adjust output price
+    for (const [productId] of this.outputStorage) {
+      this.adjustOutputPrice(productId, priceFloor);
     }
 
-    // Price for input products (buy price)
+    // Input prices: for each input, set buy price = current output sell price of that input
+    // (producers set a buy willingness but trades don't check buy price anymore)
     for (const [productId, storage] of this.inputStorage) {
-      let inputBase = this.basePrice;
-      if (isProcessor && marketPrices && recipeInputIds.has(productId)) {
-        // Use market price as buy base for recipe inputs
-        inputBase = marketPrices.get(productId) ?? this.basePrice;
+      let price = this.prices.get(productId) ?? 1;
+      // Scarce inputs → raise willingness, surplus → lower
+      if (storage.idealMax !== undefined) {
+        if (storage.current < storage.idealMin) {
+          price += 1;
+        } else if (storage.current > storage.idealMax) {
+          price -= 1;
+        }
       }
-      this.prices.set(productId, ActorState.calculatePrice(
-        inputBase, storage.current, storage.capacity, storage.ideal
-      ));
+      price = Math.max(price, 1);
+      this.prices.set(productId, price);
+    }
+  }
+
+  /**
+   * Warehouse pricing — keeps old continuous curve (warehouses excluded from this change).
+   */
+  _updateWarehousePrices() {
+    for (const [productId, storage] of this.outputStorage) {
+      if (storage.capacity <= 0) {
+        this.prices.set(productId, 1);
+        continue;
+      }
+      const fillRatio = storage.current / storage.capacity;
+      const idealRatio = (storage.ideal ?? storage.capacity * 0.5) / storage.capacity;
+      let price;
+      if (fillRatio >= idealRatio) {
+        const denom = 1.0 - idealRatio;
+        const t = denom > 0 ? Math.min((fillRatio - idealRatio) / denom, 1.0) : 0;
+        price = 1.0 * (1.0 - 0.75 * t);
+      } else {
+        const t = idealRatio > 0 ? Math.min((idealRatio - fillRatio) / idealRatio, 1.0) : 0;
+        price = 1.0 * (1.0 + 4.0 * t);
+      }
+      this.prices.set(productId, Math.max(price, 1));
     }
   }
 
@@ -190,18 +275,10 @@ export class ActorState {
   }
 
   /**
-   * Get the buy price for a product (from input storage — inverse logic: low stock = high willingness to pay).
+   * Get the buy price for a product (from input storage).
    */
   getBuyPrice(productId) {
     return this.prices.get(productId) ?? 1;
-  }
-
-  /**
-   * Recalculate all prices. Call this after storage changes.
-   * @param {Map<number, number>} [marketPrices] - average sell prices per product
-   */
-  updatePrices(marketPrices) {
-    this._recalculatePrices(marketPrices);
   }
 
   // --- Serialization ---
@@ -217,8 +294,9 @@ export class ActorState {
       productionProgress: this.productionProgress,
       isProducing: this.isProducing,
       status: this.status,
-      basePrice: this.basePrice,
-      recipe: this.recipe
+      profitMargin: this.profitMargin,
+      recipe: this.recipe,
+      prices: Array.from(this.prices.entries())
     };
   }
 
@@ -230,21 +308,35 @@ export class ActorState {
     state.productionProgress = data.productionProgress ?? 0.0;
     state.isProducing = data.isProducing ?? false;
     state.status = data.status ?? 'idle';
-    state.basePrice = 1.0;
+    state.profitMargin = data.profitMargin ?? 0.05;
     state.recipe = data.recipe ?? [];
-    state._recalculatePrices();
+
+    // Restore prices
+    if (data.prices && Array.isArray(data.prices)) {
+      state.prices = new Map(data.prices);
+    } else {
+      state._initializePrices();
+    }
+
     return state;
   }
 
   _serializeStorageMap(map) {
     const entries = [];
     for (const [productId, storage] of map) {
-      entries.push({
+      const entry = {
         productId,
         current: storage.current,
-        capacity: storage.capacity,
-        ideal: storage.ideal
-      });
+        capacity: storage.capacity
+      };
+      // Producer slots have idealMin/idealMax, warehouse slots have ideal
+      if (storage.idealMin !== undefined) {
+        entry.idealMin = storage.idealMin;
+        entry.idealMax = storage.idealMax;
+      } else {
+        entry.ideal = storage.ideal;
+      }
+      entries.push(entry);
     }
     return entries;
   }
@@ -253,11 +345,23 @@ export class ActorState {
     const map = new Map();
     if (entries && Array.isArray(entries)) {
       for (const entry of entries) {
-        map.set(entry.productId, {
+        const slot = {
           current: entry.current,
-          capacity: entry.capacity,
-          ideal: entry.ideal
-        });
+          capacity: entry.capacity
+        };
+        // Migrate old format: single `ideal` → idealMin/idealMax
+        if (entry.idealMin !== undefined) {
+          slot.idealMin = entry.idealMin;
+          slot.idealMax = entry.idealMax;
+        } else if (entry.ideal !== undefined) {
+          // Old save format — migrate
+          slot.idealMin = 0;
+          slot.idealMax = Math.min(entry.ideal, entry.capacity);
+        } else {
+          slot.idealMin = 0;
+          slot.idealMax = DEFAULT_IDEAL_RANGE_SIZE;
+        }
+        map.set(entry.productId, slot);
       }
     }
     return map;

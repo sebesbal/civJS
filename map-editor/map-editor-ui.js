@@ -463,6 +463,7 @@ export class MapEditorUI {
         'idle': 'Idle',
         'producing': 'Producing',
         'output_full': 'Output Full',
+        'output_surplus': 'Output Above Ideal',
         'missing_inputs': 'Missing Inputs'
       };
       const statusRow = document.createElement('div');
@@ -503,7 +504,9 @@ export class MapEditorUI {
           `${fuelInfo.name}: ${fuelStorage.current.toFixed(1)} / ${fuelStorage.capacity}`,
           fuelStorage.current,
           fuelStorage.capacity,
-          fuelInfo
+          fuelInfo,
+          fuelStorage.idealMin,
+          fuelStorage.idealMax
         )
       );
     }
@@ -525,7 +528,9 @@ export class MapEditorUI {
             `${productInfo.name}: ${storage.current.toFixed(1)} / ${storage.capacity}`,
             storage.current,
             storage.capacity,
-            productInfo
+            productInfo,
+            storage.idealMin,
+            storage.idealMax
           )
         );
       }
@@ -548,7 +553,9 @@ export class MapEditorUI {
             `${productInfo.name}: ${storage.current.toFixed(1)} / ${storage.capacity}`,
             storage.current,
             storage.capacity,
-            productInfo
+            productInfo,
+            storage.idealMin,
+            storage.idealMax
           )
         );
       }
@@ -584,7 +591,7 @@ export class MapEditorUI {
         // Price value
         const priceSpan = document.createElement('span');
         priceSpan.className = 'price-row-value';
-        priceSpan.textContent = `$${price.toFixed(2)}`;
+        priceSpan.textContent = `$${Math.round(price)}`;
         priceRow.appendChild(priceSpan);
 
         this.propertiesPanel.appendChild(priceRow);
@@ -610,8 +617,10 @@ export class MapEditorUI {
    * @param {number} current - Current value
    * @param {number} capacity - Maximum capacity
    * @param {Object} productInfo - Product info with icon, color, name
+   * @param {number} [idealMin] - Ideal range minimum (optional)
+   * @param {number} [idealMax] - Ideal range maximum (optional)
    */
-  _createStorageBar(label, current, capacity, productInfo = null) {
+  _createStorageBar(label, current, capacity, productInfo = null, idealMin = undefined, idealMax = undefined) {
     const container = document.createElement('div');
     container.className = 'storage-bar-container';
 
@@ -648,6 +657,18 @@ export class MapEditorUI {
     else barInner.style.background = '#4caf50';
 
     barOuter.appendChild(barInner);
+
+    // Add ideal range markers if provided
+    if (idealMin !== undefined && idealMax !== undefined && capacity > 0) {
+      const rangeOverlay = document.createElement('div');
+      rangeOverlay.className = 'storage-bar-ideal-range';
+      const leftPct = (idealMin / capacity) * 100;
+      const widthPct = ((idealMax - idealMin) / capacity) * 100;
+      rangeOverlay.style.left = `${leftPct}%`;
+      rangeOverlay.style.width = `${widthPct}%`;
+      barOuter.appendChild(rangeOverlay);
+    }
+
     container.appendChild(barOuter);
     return container;
   }
