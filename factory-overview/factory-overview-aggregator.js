@@ -86,11 +86,33 @@ export class FactoryOverviewAggregator {
       }
       const avgSellPrice = count > 0 ? totalSellPrice / count : 0;
 
+      // Transportation metrics for this product (from active traders carrying this product)
+      const productTraders = simulationEngine
+        .getActiveTraders()
+        .filter(t => t.productId === productId);
+      let totalRouteLength = 0;
+      let totalFuelCost = 0;
+      for (const trader of productTraders) {
+        const metrics = simulationEngine.getPathMetrics(trader.path);
+        totalRouteLength += metrics.routeLength;
+        totalFuelCost += metrics.fuelCost;
+      }
+      const transportCount = productTraders.length;
+      const avgRouteLength = transportCount > 0 ? totalRouteLength / transportCount : 0;
+      // Average fuel cost is per route unit (tile), so:
+      // avg transport cost = avg fuel cost per tile * avg route length.
+      const avgFuelCost = totalRouteLength > 0 ? totalFuelCost / totalRouteLength : 0;
+      const avgTransportCost = avgFuelCost * avgRouteLength;
+
       this.stats.set(productId, {
         factoryCount: count,
         avgInputFillPct,
         avgOutputFillPct,
         avgSellPrice,
+        transportCount,
+        avgRouteLength,
+        avgTransportCost,
+        avgFuelCost,
         statusCounts,
         inputDetails
       });
@@ -98,7 +120,7 @@ export class FactoryOverviewAggregator {
   }
 
   /**
-   * @returns {Map<productId, { factoryCount, avgInputFillPct, avgOutputFillPct, avgSellPrice, statusCounts, inputDetails }>}
+   * @returns {Map<productId, { factoryCount, avgInputFillPct, avgOutputFillPct, avgSellPrice, transportCount, avgRouteLength, avgTransportCost, avgFuelCost, statusCounts, inputDetails }>}
    */
   getStats() {
     return this.stats;

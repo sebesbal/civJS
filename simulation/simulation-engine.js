@@ -42,6 +42,12 @@ export class SimulationEngine {
     // Trade evaluation interval (not every tick to save CPU)
     this._tradeEvalCounter = 0;
     this._tradeEvalInterval = 3; // evaluate trades every N ticks
+
+    // Cost model constants
+    this.transportCostRoad = 0.3;
+    this.transportCostOffRoad = 1.0;
+    this.fuelCostRoad = 0.03;
+    this.fuelCostOffRoad = 0.1;
   }
 
   /**
@@ -542,13 +548,20 @@ export class SimulationEngine {
   }
 
   _computePathFuelCost(path) {
-    const offRoadFuelCost = 0.1;
-    const roadFuelCost = 0.03;
-    let cost = 0;
+    return this.getPathMetrics(path).fuelCost;
+  }
+
+  getPathMetrics(path) {
+    let routeLength = 0;
+    let transportCost = 0;
+    let fuelCost = 0;
     for (const step of path) {
-      cost += this.roadTiles.has(`${step.gridX},${step.gridZ}`) ? roadFuelCost : offRoadFuelCost;
+      const isRoad = this.roadTiles.has(`${step.gridX},${step.gridZ}`);
+      transportCost += isRoad ? this.transportCostRoad : this.transportCostOffRoad;
+      fuelCost += isRoad ? this.fuelCostRoad : this.fuelCostOffRoad;
+      routeLength++;
     }
-    return cost;
+    return { routeLength, transportCost, fuelCost };
   }
 
   // --- Phase 4: Pricing ---
