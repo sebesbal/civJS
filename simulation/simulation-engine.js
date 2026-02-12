@@ -43,9 +43,11 @@ export class SimulationEngine {
 
     // Trade evaluation interval (not every tick to save CPU)
     this._tradeEvalCounter = 0;
-    this._tradeEvalInterval = 3; // evaluate trades every N ticks
+    this._tradeEvalInterval = 1; // evaluate trades every tick for steadier replenishment
     this.maxContractsPerActor = 10;
     this.maxConcurrentTradersPerContract = 3;
+    this.contractReplacementMargin = 1.25; // replacement requires meaningfully better score
+    this.minContractLifetimeTicks = 25; // avoid rapid churn right after creation
 
     // Cost model constants
     this.transportCostRoad = 0.3;
@@ -350,8 +352,6 @@ export class SimulationEngine {
       const buyer = this._findBestBuyer(sourceState, contract.productId);
       if (buyer && buyer.state.objectId === contract.destObjectId) {
         contract.score = buyer.score;
-      } else {
-        contract.score *= 0.98;
       }
     }
 
@@ -465,7 +465,10 @@ export class SimulationEngine {
       if (contract.score < worst.score) worst = contract;
     }
 
-    if (candidate.score <= worst.score) return;
+    // Do not churn very fresh contracts; let flows stabilize first.
+    if (this.tickCount - (worst.createdTick ?? 0) < this.minContractLifetimeTicks) return;
+    // Require a strong improvement before replacing.
+    if (candidate.score <= worst.score * this.contractReplacementMargin) return;
 
     this.contracts = this.contracts.filter(contract => contract.id !== worst.id);
     this._createContract(candidate);
@@ -479,7 +482,8 @@ export class SimulationEngine {
       productId: candidate.productId,
       amountPerShipment: candidate.amountPerShipment,
       unitPrice: candidate.unitPrice,
-      score: candidate.score
+      score: candidate.score,
+      createdTick: this.tickCount
     });
   }
 
@@ -532,9 +536,9 @@ export class SimulationEngine {
   }
 
   _sourceCancelsContract(sourceState, contract) {
-    const sellPrice = Math.ceil(sourceState.getSellPrice(contract.productId));
-    // Actor's fixed contract price must not violate current selling rule.
-    return contract.unitPrice < sellPrice;
+    const minAllowedPrice = this._getMinimumSellPrice(sourceState, contract.productId);
+    // Actor cancels only when fixed contract price violates hard floor-cost rule.
+    return contract.unitPrice < minAllowedPrice;
   }
 
   _destinationCancelsContract(destState, productId) {
@@ -552,6 +556,24 @@ export class SimulationEngine {
       return storage.current > storage.ideal;
     }
     return false;
+  }
+
+  _getMinimumSellPrice(sourceState, productId) {
+    if (sourceState.type !== 'PRODUCER') {
+      return 1;
+    }
+
+    if (!sourceState.recipe || sourceState.recipe.length === 0) {
+      return 1;
+    }
+
+    let cost = 0;
+    for (const inp of sourceState.recipe) {
+      const minInputPrice = sourceState.minInputPrices.get(inp.productId) ?? 1;
+      cost += inp.amount * minInputPrice;
+    }
+
+    return Math.max(1, Math.ceil(cost * (1 + sourceState.profitMargin)));
   }
 
   /**
@@ -576,13 +598,14 @@ export class SimulationEngine {
       if (candidateState.type === 'PRODUCER') {
         storage = candidateState.inputStorage.get(productId);
         if (storage) {
-          // Skip only if at capacity
+          // If above ideal, actor should not buy this product.
+          if (this._isAboveIdeal(storage)) continue;
           if (storage.current >= storage.capacity) continue;
           needsProduct = true;
         }
       } else if (candidateState.type === 'WAREHOUSE') {
         storage = candidateState.outputStorage.get(productId);
-        if (storage && storage.current < storage.capacity) needsProduct = true;
+        if (storage && !this._isAboveIdeal(storage) && storage.current < storage.capacity) needsProduct = true;
       }
 
       if (!needsProduct || !storage) continue;
@@ -594,19 +617,14 @@ export class SimulationEngine {
       // If fuel is enabled, skip destinations this source cannot currently reach.
       if (fuelProductId !== null && sourceFuelAvailable < transportCost) continue;
 
-      // Score: deficit from idealMax gives higher priority to under-stocked buyers.
-      // Buyers above idealMax still eligible but with lower score.
+      // Score: deficit from ideal target gives higher priority to under-stocked buyers.
       let deficit;
       if (storage.idealMax !== undefined) {
         deficit = storage.idealMax - storage.current;
       } else {
         deficit = (storage.ideal ?? storage.capacity) - storage.current;
       }
-      // Buyers above idealMax get a small positive score based on remaining capacity
-      if (deficit <= 0) {
-        deficit = (storage.capacity - storage.current) * 0.01;
-        if (deficit <= 0) continue;
-      }
+      if (deficit <= 0) continue;
 
       // Higher deficit and lower transport cost = higher priority.
       let score = (deficit / storage.capacity) / (1 + transportCost);
@@ -808,7 +826,8 @@ export class SimulationEngine {
         productId: c.productId,
         amountPerShipment: c.amountPerShipment,
         unitPrice: c.unitPrice,
-        score: c.score
+        score: c.score,
+        createdTick: c.createdTick ?? 0
       })),
       activeTraders: this.activeTraders.map(t => ({
         id: t.id,
@@ -844,6 +863,9 @@ export class SimulationEngine {
 
     // Restore contracts
     this.contracts = data.contracts ?? [];
+    for (const contract of this.contracts) {
+      if (contract.createdTick === undefined) contract.createdTick = this.tickCount;
+    }
     if (!data.nextContractId && this.contracts.length > 0) {
       this.nextContractId = Math.max(...this.contracts.map(c => c.id)) + 1;
     }
