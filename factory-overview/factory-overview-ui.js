@@ -200,6 +200,7 @@ export class FactoryOverviewUI extends OrthographicViewerBase {
 
     // Average sell price
     this._addPropertyRow('Avg Sell Price', `${Math.round(stats.avgSellPrice)}`);
+    this._addPropertyRow('Uptime', `${((stats.avgUptimePct || 0) * 100).toFixed(1)}%`);
 
     // Transportation metrics
     this._addPropertyRow('Active Transporters', `${stats.transportCount || 0}`);

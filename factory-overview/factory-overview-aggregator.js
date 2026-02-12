@@ -86,6 +86,14 @@ export class FactoryOverviewAggregator {
       }
       const avgSellPrice = count > 0 ? totalSellPrice / count : 0;
 
+      // Historical uptime (producing ticks / observed ticks) averaged by factory
+      let totalUptimePct = 0;
+      for (const s of states) {
+        const uptime = s.observedTicks > 0 ? (s.producingTicks / s.observedTicks) : 0;
+        totalUptimePct += uptime;
+      }
+      const avgUptimePct = count > 0 ? totalUptimePct / count : 0;
+
       // Transportation metrics for this product (from active traders carrying this product)
       const productTraders = simulationEngine
         .getActiveTraders()
@@ -109,6 +117,7 @@ export class FactoryOverviewAggregator {
         avgInputFillPct,
         avgOutputFillPct,
         avgSellPrice,
+        avgUptimePct,
         transportCount,
         avgRouteLength,
         avgTransportCost,

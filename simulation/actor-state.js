@@ -28,6 +28,8 @@ export class ActorState {
 
     // Production counter (useful for sinks where output disappears)
     this.totalProduced = 0;
+    this.producingTicks = 0;
+    this.observedTicks = 0;
 
     // Pricing
     this.profitMargin = 0.05;       // default 5%
@@ -301,6 +303,8 @@ export class ActorState {
       productionProgress: this.productionProgress,
       isProducing: this.isProducing,
       status: this.status,
+      producingTicks: this.producingTicks,
+      observedTicks: this.observedTicks,
       profitMargin: this.profitMargin,
       recipe: this.recipe,
       prices: Array.from(this.prices.entries())
@@ -315,6 +319,8 @@ export class ActorState {
     state.productionProgress = data.productionProgress ?? 0.0;
     state.isProducing = data.isProducing ?? false;
     state.status = data.status ?? 'idle';
+    state.producingTicks = data.producingTicks ?? 0;
+    state.observedTicks = data.observedTicks ?? 0;
     state.profitMargin = data.profitMargin ?? 0.05;
     state.recipe = data.recipe ?? [];
 

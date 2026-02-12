@@ -195,12 +195,13 @@ export class FactoryOverviewVisualizer {
 
     // Price
     ctx.fillText(`Avg Price: ${Math.round(stats.avgSellPrice)}`, 16, 74);
+    ctx.fillText(`Uptime: ${((stats.avgUptimePct || 0) * 100).toFixed(1)}%`, 16, 98);
 
     // Output fill bar
     const barX = 16;
     const barW = w - 32;
     const barH = 24;
-    let barY = 108;
+    let barY = 126;
 
     ctx.fillStyle = '#aaaaaa';
     ctx.font = '14px Arial';

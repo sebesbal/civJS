@@ -48,6 +48,7 @@ export class SimulationEngine {
     this.maxConcurrentTradersPerContract = 3;
     this.contractReplacementMargin = 1.25; // replacement requires meaningfully better score
     this.minContractLifetimeTicks = 25; // avoid rapid churn right after creation
+    this.transportCostWeight = 2.0; // stronger bias toward shorter/cheaper routes
 
     // Cost model constants
     this.transportCostRoad = 0.3;
@@ -175,6 +176,7 @@ export class SimulationEngine {
       if (!isSink && outputStorage && outputStorage.current >= outputStorage.capacity) {
         state.isProducing = false;
         state.status = 'output_full';
+        state.observedTicks += 1;
         continue;
       }
 
@@ -245,6 +247,11 @@ export class SimulationEngine {
           state.isProducing = false;
           state.status = 'missing_inputs';
         }
+      }
+
+      state.observedTicks += 1;
+      if (state.status === 'producing') {
+        state.producingTicks += 1;
       }
     }
   }
@@ -374,7 +381,7 @@ export class SimulationEngine {
           continue;
         }
 
-        const amountPerShipment = Math.max(1, Math.floor(outputStorage.capacity / this.maxContractsPerActor));
+        const amountPerShipment = Math.min(10, Math.max(1, Math.floor(outputStorage.capacity / 4)));
         const candidate = {
           sourceObjectId: sourceState.objectId,
           destObjectId: buyer.state.objectId,
@@ -414,8 +421,18 @@ export class SimulationEngine {
       if (sourceStorage.current < 1) continue;
       if (destStorage.current >= destStorage.capacity) continue;
 
-      const freeCapacity = Math.floor(destStorage.capacity - destStorage.current);
-      const shipmentAmount = Math.max(1, Math.min(contract.amountPerShipment, freeCapacity));
+      const inTransitToDest = this._getInTransitToDestination(destState.objectId, contract.productId);
+      const idealTarget = this._getIdealTarget(destStorage);
+      const projectedLevel = destStorage.current + inTransitToDest;
+      const deficitToIdeal = Math.max(0, idealTarget - projectedLevel);
+      if (deficitToIdeal < 1) continue;
+
+      const projectedFreeCapacity = Math.floor(destStorage.capacity - projectedLevel);
+      const shipmentAmount = Math.max(1, Math.min(
+        contract.amountPerShipment,
+        Math.floor(deficitToIdeal),
+        projectedFreeCapacity
+      ));
       if (sourceStorage.current < shipmentAmount) continue;
 
       if (shipmentAmount < 1) {
@@ -558,6 +575,63 @@ export class SimulationEngine {
     return false;
   }
 
+  _getIdealTarget(storage) {
+    if (storage.idealMax !== undefined) return storage.idealMax;
+    if (storage.ideal !== undefined) return storage.ideal;
+    return storage.capacity;
+  }
+
+  _getInTransitToDestination(destObjectId, productId) {
+    let total = 0;
+    for (const trader of this.activeTraders) {
+      if (trader.destObjectId === destObjectId && trader.productId === productId) {
+        total += trader.amount;
+      }
+    }
+    return total;
+  }
+
+  _getProducerInputUrgency(candidateState, productId) {
+    if (candidateState.type !== 'PRODUCER') return 1;
+
+    const storage = candidateState.inputStorage.get(productId);
+    if (!storage) return 1;
+
+    const recipeItem = candidateState.recipe.find(inp => inp.productId === productId);
+    const requiredAmount = recipeItem ? recipeItem.amount : 0;
+    if (requiredAmount <= 0) {
+      // Non-recipe reserves (for example fuel buffers) are lower urgency.
+      return 0.6;
+    }
+
+    let urgency = 1;
+    if (candidateState.status === 'missing_inputs') {
+      urgency *= 1.5;
+    }
+
+    const coverTicks = storage.current / requiredAmount;
+    if (coverTicks < 1) urgency *= 2.2;
+    else if (coverTicks < 2) urgency *= 1.7;
+    else if (coverTicks < 4) urgency *= 1.3;
+
+    let missingCount = 0;
+    let thisInputMissing = false;
+    for (const inp of candidateState.recipe) {
+      const s = candidateState.inputStorage.get(inp.productId);
+      const missing = !s || s.current < inp.amount;
+      if (missing) {
+        missingCount += 1;
+        if (inp.productId === productId) thisInputMissing = true;
+      }
+    }
+    // If this one input would unblock production, prioritize strongly.
+    if (thisInputMissing && missingCount === 1) {
+      urgency *= 1.8;
+    }
+
+    return urgency;
+  }
+
   _getMinimumSellPrice(sourceState, productId) {
     if (sourceState.type !== 'PRODUCER') {
       return 1;
@@ -598,14 +672,21 @@ export class SimulationEngine {
       if (candidateState.type === 'PRODUCER') {
         storage = candidateState.inputStorage.get(productId);
         if (storage) {
-          // If above ideal, actor should not buy this product.
-          if (this._isAboveIdeal(storage)) continue;
-          if (storage.current >= storage.capacity) continue;
+          const inTransit = this._getInTransitToDestination(candidateState.objectId, productId);
+          const projectedCurrent = storage.current + inTransit;
+          if (projectedCurrent >= storage.capacity) continue;
+          if (projectedCurrent > this._getIdealTarget(storage)) continue;
           needsProduct = true;
         }
       } else if (candidateState.type === 'WAREHOUSE') {
         storage = candidateState.outputStorage.get(productId);
-        if (storage && !this._isAboveIdeal(storage) && storage.current < storage.capacity) needsProduct = true;
+        if (storage) {
+          const inTransit = this._getInTransitToDestination(candidateState.objectId, productId);
+          const projectedCurrent = storage.current + inTransit;
+          if (projectedCurrent >= storage.capacity) continue;
+          if (projectedCurrent > this._getIdealTarget(storage)) continue;
+          needsProduct = true;
+        }
       }
 
       if (!needsProduct || !storage) continue;
@@ -618,16 +699,17 @@ export class SimulationEngine {
       if (fuelProductId !== null && sourceFuelAvailable < transportCost) continue;
 
       // Score: deficit from ideal target gives higher priority to under-stocked buyers.
+      const inTransit = this._getInTransitToDestination(candidateState.objectId, productId);
       let deficit;
       if (storage.idealMax !== undefined) {
-        deficit = storage.idealMax - storage.current;
+        deficit = storage.idealMax - (storage.current + inTransit);
       } else {
-        deficit = (storage.ideal ?? storage.capacity) - storage.current;
+        deficit = (storage.ideal ?? storage.capacity) - (storage.current + inTransit);
       }
       if (deficit <= 0) continue;
 
       // Higher deficit and lower transport cost = higher priority.
-      let score = (deficit / storage.capacity) / (1 + transportCost);
+      let score = (deficit / storage.capacity) / (1 + (transportCost * this.transportCostWeight));
 
       // When allocating fuel product, prioritize buyers that need it as recipe input
       // over those only topping up transport fuel reserves.
@@ -638,6 +720,17 @@ export class SimulationEngine {
           score *= 0.2;
         }
       }
+
+      // Uptime-first allocation: prioritize deliveries that most reduce production downtime.
+      if (candidateState.type === 'PRODUCER') {
+        score *= this._getProducerInputUrgency(candidateState, productId);
+      }
+
+      // Route stickiness reduces transport-path churn.
+      if (this._getContract(sourceState.objectId, candidateState.objectId, productId)) {
+        score *= 1.15;
+      }
+
       if (score > bestScore) {
         bestScore = score;
         bestBuyer = { state: candidateState, storage, score };
