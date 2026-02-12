@@ -46,13 +46,16 @@ export class ActorState {
     // Store recipe for cost-based pricing
     this.recipe = node.inputs.map(inp => ({ productId: inp.productId, amount: inp.amount }));
 
+    const inputIdealMax = Math.max(DEFAULT_IDEAL_RANGE_SIZE, Math.floor(inputCapacity * 0.4));
+    const outputIdealMax = Math.max(DEFAULT_IDEAL_RANGE_SIZE, Math.floor(outputCapacity * 0.3));
+
     // Input storage: one slot per recipe input
     for (const input of node.inputs) {
       this.inputStorage.set(input.productId, {
         current: 0,
         capacity: inputCapacity,
         idealMin: 0,
-        idealMax: DEFAULT_IDEAL_RANGE_SIZE
+        idealMax: inputIdealMax
       });
     }
 
@@ -61,7 +64,7 @@ export class ActorState {
       current: 0,
       capacity: outputCapacity,
       idealMin: 0,
-      idealMax: DEFAULT_IDEAL_RANGE_SIZE
+      idealMax: outputIdealMax
     });
 
     // Add fuel storage if fuel is designated and not already in inputs/outputs
@@ -71,13 +74,13 @@ export class ActorState {
       const hasInOutput = this.outputStorage.has(fuelProductId);
 
       if (!hasInInput && !hasInOutput) {
-        // Fuel is consumed by outbound transport, so keep a larger reserve than regular ideal ranges.
-        const fuelCapacity = Math.max(40, inputCapacity);
+        // Keep a moderate fuel reserve to avoid starving recipe-critical inputs.
+        const fuelCapacity = Math.max(20, inputCapacity);
         this.inputStorage.set(fuelProductId, {
           current: 0,
           capacity: fuelCapacity,
           idealMin: 0,
-          idealMax: Math.max(DEFAULT_IDEAL_RANGE_SIZE, Math.floor(fuelCapacity * 0.5))
+          idealMax: Math.max(DEFAULT_IDEAL_RANGE_SIZE, Math.floor(fuelCapacity * 0.25))
         });
       }
     }

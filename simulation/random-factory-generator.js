@@ -18,6 +18,16 @@ export class RandomFactoryGenerator {
 
     // Calculate factory counts based on consumption demand
     const factoryCounts = this._calculateFactoryCounts(economyManager, nodes, totalFactories);
+    const fuelProductId = economyManager.getFuelProductId();
+
+    // Non-fuel raw materials are often overprovisioned by pure demand scaling.
+    // Trim them to improve utilization without starving the chain.
+    for (const node of nodes) {
+      if (node.inputs.length !== 0) continue;
+      if (node.id === fuelProductId) continue;
+      const current = factoryCounts.get(node.id) || 1;
+      factoryCounts.set(node.id, Math.max(1, Math.ceil(current * 0.5)));
+    }
 
     // Find valid tiles (non-water, unoccupied)
     const validTiles = this._getValidTiles(tilemap, objectManager, minSpacing);
@@ -208,11 +218,11 @@ export class RandomFactoryGenerator {
         }
       }
     } else {
-      // Auto-scale: min 2, max 16 per product (2x baseline)
+      // Auto-scale: allow single-factory products for low-demand/deep-chain nodes.
       for (const node of nodes) {
         const nodeDemand = demand.get(node.id);
         const ratio = nodeDemand / maxDemand;
-        const count = Math.max(2, Math.min(16, Math.round(ratio * 16)));
+        const count = Math.max(1, Math.min(16, Math.round(ratio * 16)));
         factoryCounts.set(node.id, count);
       }
     }

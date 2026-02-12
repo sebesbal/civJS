@@ -170,13 +170,7 @@ export class SimulationEngine {
         continue;
       }
 
-      // Check if output is above ideal range — pause production (not at capacity, but surplus)
-      if (!isSink && outputStorage && outputStorage.idealMax !== undefined &&
-          outputStorage.current > outputStorage.idealMax) {
-        state.isProducing = false;
-        state.status = 'output_surplus';
-        continue;
-      }
+      // Keep producing until true capacity; ideal range affects pricing/trading, not hard stop.
 
       if (isRawMaterial) {
         // Raw materials always produce
@@ -322,13 +316,8 @@ export class SimulationEngine {
     // Find all actors with output surplus
     for (const sourceState of this.actorStates.values()) {
       for (const [productId, outputStorage] of sourceState.outputStorage) {
-        // Need surplus: current > idealMax (for producers) or current > ideal*0.5 (for warehouses)
-        if (outputStorage.idealMax !== undefined) {
-          if (outputStorage.current <= outputStorage.idealMax) continue;
-        } else {
-          // Warehouse fallback
-          if (outputStorage.current <= (outputStorage.ideal ?? 0) * 0.5) continue;
-        }
+        // Need at least some stock to transport.
+        if (outputStorage.current <= 0) continue;
         // Need at least 1 unit to transport
         if (outputStorage.current < 1) continue;
 
@@ -337,12 +326,13 @@ export class SimulationEngine {
         if (!buyer) continue;
 
         // Check if there's already an active trader on this route for this product
-        const alreadyTrading = this.activeTraders.some(t =>
+        const concurrentOnRoute = this.activeTraders.filter(t =>
           t.sourceObjectId === sourceState.objectId &&
           t.destObjectId === buyer.state.objectId &&
           t.productId === productId
-        );
-        if (alreadyTrading) continue;
+        ).length;
+        // Allow limited parallel shipments on the same route/product.
+        if (concurrentOnRoute >= 3) continue;
 
         // Find path (use cache)
         const sourceObj = this.objectManager.getObjectById(sourceState.objectId);
@@ -436,7 +426,17 @@ export class SimulationEngine {
       }
 
       // Higher deficit and lower transport cost = higher priority.
-      const score = (deficit / storage.capacity) / (1 + transportCost);
+      let score = (deficit / storage.capacity) / (1 + transportCost);
+
+      // When allocating fuel product, prioritize buyers that need it as recipe input
+      // over those only topping up transport fuel reserves.
+      if (candidateState.type === 'PRODUCER' && fuelProductId !== null && productId === fuelProductId) {
+        const node = this.economyManager.getNode(candidateState.productId);
+        const recipeNeedsFuel = !!node && node.inputs.some(inp => inp.productId === fuelProductId);
+        if (!recipeNeedsFuel) {
+          score *= 0.2;
+        }
+      }
       if (score > bestScore) {
         bestScore = score;
         bestBuyer = { state: candidateState, storage };
@@ -475,7 +475,7 @@ export class SimulationEngine {
       if (available < 1) return;
     }
 
-    const amount = Math.min(Math.floor(available), 5); // Max 5 units per trip
+    const amount = Math.min(Math.floor(available), 10); // Max 10 units per trip
     if (amount <= 0) return;
 
     if (fuelStorage && fuelRequired > 0) {
@@ -497,7 +497,7 @@ export class SimulationEngine {
       path,           // array of {gridX, gridZ}
       pathIndex: 0,   // current tile in path
       progress: 0,    // 0-1 progress within current segment
-      speed: 0.5      // tiles per tick
+      speed: 1.0      // tiles per tick
     };
 
     this.activeTraders.push(trader);
