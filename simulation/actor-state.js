@@ -184,7 +184,7 @@ export class ActorState {
    * +1 if storage < idealMin (scarce), -1 if storage > idealMax (surplus).
    * Clamp to priceFloor.
    */
-  adjustOutputPrice(productId, priceFloor) {
+  adjustOutputPrice(productId, priceFloor, priceCeiling = Infinity) {
     const storage = this.outputStorage.get(productId);
     if (!storage) return;
 
@@ -197,6 +197,7 @@ export class ActorState {
     }
 
     price = Math.max(price, priceFloor);
+    price = Math.min(price, priceCeiling);
     this.prices.set(productId, price);
   }
 
@@ -226,15 +227,17 @@ export class ActorState {
     }
 
     // Adjust output price
+    // Keep prices within a bounded scarcity band above production-cost floor.
+    const priceCeiling = Math.max(priceFloor, Math.ceil(priceFloor * 2));
     for (const [productId] of this.outputStorage) {
-      this.adjustOutputPrice(productId, priceFloor);
+      this.adjustOutputPrice(productId, priceFloor, priceCeiling);
     }
 
-    // Input prices: for each input, set buy price = current output sell price of that input
-    // (producers set a buy willingness but trades don't check buy price anymore)
+    // Input prices in the inspector should reflect real sourcing cost when known:
+    // cheapest seller's price + transport. Keep a small storage-pressure adjustment.
     for (const [productId, storage] of this.inputStorage) {
-      let price = this.prices.get(productId) ?? 1;
-      // Scarce inputs → raise willingness, surplus → lower
+      let price = Math.ceil(this.minInputPrices.get(productId) ?? (this.prices.get(productId) ?? 1));
+      // Scarce inputs -> raise willingness, surplus -> lower
       if (storage.idealMax !== undefined) {
         if (storage.current < storage.idealMin) {
           price += 1;

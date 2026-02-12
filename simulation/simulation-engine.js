@@ -483,10 +483,8 @@ export class SimulationEngine {
     }
     outputStorage.current -= amount;
 
-    // If withdrawal empties output, shift ideal range up
-    if (outputStorage.current <= 0 && outputStorage.idealMin !== undefined) {
-      sourceState.shiftIdealRange(outputStorage, 'up');
-    }
+    // Do not shift producer output ideal range up when selling out.
+    // Repeated successful sales otherwise ratchet scarcity targets upward permanently.
 
     const trader = {
       id: this.nextTraderId++,
