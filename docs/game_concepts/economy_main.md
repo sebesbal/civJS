@@ -20,7 +20,7 @@ The economy is made up of different types of actors:
 
 The player defines priorities for final goods. For example, the player may want to build a military unit or a building in a specific cell, or invest in researching a new technology.
 
-The goal of the economy is to satisfy these priorities. In practice, this means maximizing the production of final goods while minimizing transportation costs and other inefficiencies.
+The goal of the economy is to satisfy these priorities. In practice, this means maximizing the production of final goods while minimizing transportation costs and other inefficiencies. This also means that fluctuations in production and transportation should be minimal, and producers should have maximum uptime.
 
 ## The Production Problem
 

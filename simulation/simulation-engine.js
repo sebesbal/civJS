@@ -45,7 +45,7 @@ export class SimulationEngine {
     this._tradeEvalCounter = 0;
     this._tradeEvalInterval = 3; // evaluate trades every N ticks
     this.maxContractsPerActor = 10;
-    this.maxContractFailures = 5;
+    this.maxConcurrentTradersPerContract = 3;
 
     // Cost model constants
     this.transportCostRoad = 0.3;
@@ -337,21 +337,21 @@ export class SimulationEngine {
         removedIds.add(contract.id);
         continue;
       }
-
-      const path = this._getPathBetweenObjects(contract.sourceObjectId, contract.destObjectId);
-      if (!path || path.length < 2) {
-        contract.failures += 1;
-      } else {
-        const buyer = this._findBestBuyer(sourceState, contract.productId);
-        if (buyer && buyer.state.objectId === contract.destObjectId) {
-          contract.score = buyer.score;
-        } else {
-          contract.score *= 0.98;
-        }
+      // Contract stays active until one actor cancels it due to storage/pricing rules.
+      if (this._sourceCancelsContract(sourceState, contract)) {
+        removedIds.add(contract.id);
+        continue;
+      }
+      if (this._destinationCancelsContract(destState, contract.productId)) {
+        removedIds.add(contract.id);
+        continue;
       }
 
-      if (contract.failures >= this.maxContractFailures) {
-        removedIds.add(contract.id);
+      const buyer = this._findBestBuyer(sourceState, contract.productId);
+      if (buyer && buyer.state.objectId === contract.destObjectId) {
+        contract.score = buyer.score;
+      } else {
+        contract.score *= 0.98;
       }
     }
 
@@ -396,33 +396,34 @@ export class SimulationEngine {
       if (this.activeTraders.length >= maxActiveTraders) return;
 
       const concurrent = this.activeTraders.filter(t => t.contractId === contract.id).length;
-      if (concurrent > 0) continue;
+      if (concurrent >= this.maxConcurrentTradersPerContract) continue;
 
       const sourceState = this.actorStates.get(contract.sourceObjectId);
       const destState = this.actorStates.get(contract.destObjectId);
       if (!sourceState || !destState) {
-        contract.failures += 1;
         continue;
       }
 
       const sourceStorage = sourceState.outputStorage.get(contract.productId);
       const destStorage = this._getDestinationStorageForProduct(destState, contract.productId);
       if (!sourceStorage || !destStorage) {
-        contract.failures += 1;
         continue;
       }
-      if (sourceStorage.current < contract.amountPerShipment) {
-        contract.failures += 1;
-        continue;
-      }
-      if (destStorage.current + contract.amountPerShipment > destStorage.capacity) {
-        contract.failures += 1;
+      // Temporary stock/capacity limits are normal in contract systems.
+      // Do not count them as failures; keep contract alive and retry later.
+      if (sourceStorage.current < 1) continue;
+      if (destStorage.current >= destStorage.capacity) continue;
+
+      const freeCapacity = Math.floor(destStorage.capacity - destStorage.current);
+      const shipmentAmount = Math.max(1, Math.min(contract.amountPerShipment, freeCapacity));
+      if (sourceStorage.current < shipmentAmount) continue;
+
+      if (shipmentAmount < 1) {
         continue;
       }
 
       const path = this._getPathBetweenObjects(contract.sourceObjectId, contract.destObjectId);
       if (!path || path.length < 2) {
-        contract.failures += 1;
         continue;
       }
 
@@ -433,14 +434,10 @@ export class SimulationEngine {
         contract.productId,
         path,
         fuelRequired,
-        contract.amountPerShipment,
+        shipmentAmount,
         contract.id
       );
-      if (created) {
-        contract.failures = 0;
-      } else {
-        contract.failures += 1;
-      }
+      if (!created) continue;
     }
   }
 
@@ -482,8 +479,7 @@ export class SimulationEngine {
       productId: candidate.productId,
       amountPerShipment: candidate.amountPerShipment,
       unitPrice: candidate.unitPrice,
-      score: candidate.score,
-      failures: 0
+      score: candidate.score
     });
   }
 
@@ -533,6 +529,29 @@ export class SimulationEngine {
     const path = findPath(this.tilemap, fromGrid, toGrid, this.roadTiles);
     this._pathCache.set(cacheKey, path);
     return path;
+  }
+
+  _sourceCancelsContract(sourceState, contract) {
+    const sellPrice = Math.ceil(sourceState.getSellPrice(contract.productId));
+    // Actor's fixed contract price must not violate current selling rule.
+    return contract.unitPrice < sellPrice;
+  }
+
+  _destinationCancelsContract(destState, productId) {
+    const storage = this._getDestinationStorageForProduct(destState, productId);
+    if (!storage) return true;
+    // If storage is above ideal, actor should not buy this product.
+    return this._isAboveIdeal(storage);
+  }
+
+  _isAboveIdeal(storage) {
+    if (storage.idealMax !== undefined) {
+      return storage.current > storage.idealMax;
+    }
+    if (storage.ideal !== undefined) {
+      return storage.current > storage.ideal;
+    }
+    return false;
   }
 
   /**
@@ -789,8 +808,7 @@ export class SimulationEngine {
         productId: c.productId,
         amountPerShipment: c.amountPerShipment,
         unitPrice: c.unitPrice,
-        score: c.score,
-        failures: c.failures
+        score: c.score
       })),
       activeTraders: this.activeTraders.map(t => ({
         id: t.id,

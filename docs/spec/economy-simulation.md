@@ -88,8 +88,8 @@ Effect: full storage drives prices down (want to sell), empty storage drives pri
 ## Trading Logic (contract-based)
 
 1. Maintain existing contracts:
-   a. Drop invalid contracts (missing actors/storage/path)
-   b. Track repeated execution failures and cancel stale contracts
+   a. Drop invalid contracts (missing actors/storage)
+   b. Cancel only when one actor's local rules are violated (for example seller price rule, or buyer above-ideal storage so it should not buy)
 2. Discover new opportunities:
    a. For each available source output, find the best buyer (deficit + route cost score)
    b. If no matching contract exists, create one
