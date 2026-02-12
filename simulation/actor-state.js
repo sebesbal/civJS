@@ -71,12 +71,13 @@ export class ActorState {
       const hasInOutput = this.outputStorage.has(fuelProductId);
 
       if (!hasInInput && !hasInOutput) {
-        // Add fuel to input storage with smaller capacity (since it's consumed for transport)
+        // Fuel is consumed by outbound transport, so keep a larger reserve than regular ideal ranges.
+        const fuelCapacity = Math.max(40, inputCapacity);
         this.inputStorage.set(fuelProductId, {
           current: 0,
-          capacity: 10, // Smaller capacity for fuel
+          capacity: fuelCapacity,
           idealMin: 0,
-          idealMax: DEFAULT_IDEAL_RANGE_SIZE
+          idealMax: Math.max(DEFAULT_IDEAL_RANGE_SIZE, Math.floor(fuelCapacity * 0.5))
         });
       }
     }

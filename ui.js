@@ -323,6 +323,12 @@ export class UIManager {
     }
   }
 
+  setSimulationTick(tickCount) {
+    if (this.mapEditorUI) {
+      this.mapEditorUI.setSimulationTick(tickCount);
+    }
+  }
+
   getCurrentMode() {
     return this.mapEditorUI ? this.mapEditorUI.getCurrentMode() : null;
   }

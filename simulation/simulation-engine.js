@@ -303,18 +303,14 @@ export class SimulationEngine {
 
     if (!path || path.length < 2) return null;
 
-    let cost = 0;
-    for (const step of path) {
-      cost += this.roadTiles.has(`${step.gridX},${step.gridZ}`) ? 0.15 : 0.5;
-    }
-    return cost;
+    return this._computePathFuelCost(path);
   }
 
   // --- Phase 2: Trade Evaluation ---
 
   _evaluateTradeOpportunities() {
     // Limit active traders to prevent runaway
-    const maxActiveTraders = 50;
+    const maxActiveTraders = Math.max(50, this.actorStates.size * 4);
     if (this.activeTraders.length >= maxActiveTraders) return;
 
     // Find all actors with output surplus
@@ -360,10 +356,7 @@ export class SimulationEngine {
         if (!path || path.length < 2) continue;
 
         // Calculate fuel consumption based on path length
-        let fuelRequired = 0;
-        for (const step of path) {
-          fuelRequired += this.roadTiles.has(`${step.gridX},${step.gridZ}`) ? 0.15 : 0.5;
-        }
+        const fuelRequired = this._computePathFuelCost(path);
 
         // Check if source has enough fuel (if fuel is designated)
         const fuelProductId = this.economyManager.getFuelProductId();
@@ -388,6 +381,11 @@ export class SimulationEngine {
   _findBestBuyer(sourceState, productId) {
     let bestBuyer = null;
     let bestScore = -Infinity;
+    const fuelProductId = this.economyManager.getFuelProductId();
+    const sourceFuelStorage = fuelProductId !== null
+      ? (sourceState.outputStorage.get(fuelProductId) || sourceState.inputStorage.get(fuelProductId))
+      : null;
+    const sourceFuelAvailable = sourceFuelStorage ? sourceFuelStorage.current : Infinity;
 
     for (const candidateState of this.actorStates.values()) {
       if (candidateState.objectId === sourceState.objectId) continue;
@@ -410,6 +408,13 @@ export class SimulationEngine {
 
       if (!needsProduct || !storage) continue;
 
+      // Candidate must be reachable.
+      const transportCost = this._getTransportCost(sourceState.objectId, candidateState.objectId);
+      if (transportCost === null) continue;
+
+      // If fuel is enabled, skip destinations this source cannot currently reach.
+      if (fuelProductId !== null && sourceFuelAvailable < transportCost) continue;
+
       // Score: deficit from idealMax gives higher priority to under-stocked buyers.
       // Buyers above idealMax still eligible but with lower score.
       let deficit;
@@ -424,8 +429,8 @@ export class SimulationEngine {
         if (deficit <= 0) continue;
       }
 
-      // Higher deficit = higher priority
-      const score = deficit / storage.capacity;
+      // Higher deficit and lower transport cost = higher priority.
+      const score = (deficit / storage.capacity) / (1 + transportCost);
       if (score > bestScore) {
         bestScore = score;
         bestBuyer = { state: candidateState, storage };
@@ -534,6 +539,16 @@ export class SimulationEngine {
 
     // Remove completed traders
     this.activeTraders = this.activeTraders.filter(t => !completed.includes(t.id));
+  }
+
+  _computePathFuelCost(path) {
+    const offRoadFuelCost = 0.1;
+    const roadFuelCost = 0.03;
+    let cost = 0;
+    for (const step of path) {
+      cost += this.roadTiles.has(`${step.gridX},${step.gridZ}`) ? roadFuelCost : offRoadFuelCost;
+    }
+    return cost;
   }
 
   // --- Phase 4: Pricing ---

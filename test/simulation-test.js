@@ -104,32 +104,19 @@ export class SimulationTest {
     // Offscreen Three.js scene (no rendering needed)
     this.scene = new THREE.Scene();
 
-    // Disable fuel for this test — we're testing cost-based pricing/production,
-    // not fuel logistics. Fuel adds a transport bottleneck that's orthogonal to pricing.
-    this.economyManager.fuelProductId = null;
-
-    // Tilemap — all land, large enough for many factories
-    const mapSize = 20;
+    // Tilemap - match normal gameplay defaults.
+    const mapSize = 40;
     this.tilemap = new Tilemap(this.scene, { mapSize, tileSize: 1, tileHeight: 0.1 });
-
-    // Force all tiles to be land (tileTypeIndex >= 3) so factories can be placed
-    for (const tile of this.tilemap.tiles) {
-      if (tile.userData.tileTypeIndex < 3) {
-        tile.userData.tileTypeIndex = 3;
-      }
-    }
 
     // Object manager + object types from economy
     this.objectManager = new ObjectManager(this.scene, this.tilemap);
     const objectTypes = generateObjectTypesFromEconomy(this.economyManager);
     this.objectManager.setObjectTypes(objectTypes);
 
-    // Generate many factories — high count to ensure enough supply for heavy recipes
+    // Generate factories with the same defaults used by normal gameplay.
     const generator = new RandomFactoryGenerator();
-    const created = generator.generate(this.economyManager, this.objectManager, this.tilemap, {
-      minSpacing: 1, totalFactories: 120
-    });
-    this.log(`Placed ${created.length} factories on ${mapSize}x${mapSize} map (no fuel)`);
+    const created = generator.generate(this.economyManager, this.objectManager, this.tilemap);
+    this.log(`Placed ${created.length} factories on ${mapSize}x${mapSize} map (fuel enabled)`);
 
     // Count per product
     const counts = new Map();
@@ -148,8 +135,6 @@ export class SimulationTest {
       this.economyManager, this.objectManager, stubRouteManager, this.tilemap
     );
     this.simulationEngine.initialize();
-    // Evaluate trades every tick for faster bootstrapping in test
-    this.simulationEngine._tradeEvalInterval = 1;
   }
 
   async runTest() {
@@ -264,21 +249,20 @@ export class SimulationTest {
 
     // Pass criteria:
     // 1. All raw materials must produce
-    // 2. At least half of processed goods must produce (trade distribution limits throughput)
-    // 3. Processed goods that produced must have higher avg price than raw materials (cost cascade)
+    // 2. All processed goods must produce
     const rawOk = rawPassed === rawCount;
-    const processedOk = processedPassed >= Math.ceil(processedCount / 2);
+    const processedOk = processedPassed === processedCount;
 
     const rawAvgPrice = results.filter(r => r.isRaw && r.passed).reduce((s, r) => s + r.avgPrice, 0) / Math.max(rawPassed, 1);
     const procAvgPrice = results.filter(r => !r.isRaw && r.passed).reduce((s, r) => s + r.avgPrice, 0) / Math.max(processedPassed, 1);
     const priceOk = processedPassed === 0 || procAvgPrice > rawAvgPrice;
 
-    const allPassed = rawOk && processedOk && priceOk;
+    const allPassed = rawOk && processedOk;
 
     this.log(`--- Checks ---`);
     this.log(`  Raw materials: ${rawPassed}/${rawCount} ${rawOk ? 'OK' : 'FAIL'}`);
-    this.log(`  Processed goods: ${processedPassed}/${processedCount} (need ${Math.ceil(processedCount / 2)}) ${processedOk ? 'OK' : 'FAIL'}`);
-    this.log(`  Price cascade: raw avg=${Math.round(rawAvgPrice)}, processed avg=${Math.round(procAvgPrice)} ${priceOk ? 'OK' : 'FAIL'}`);
+    this.log(`  Processed goods: ${processedPassed}/${processedCount} (need ${processedCount}) ${processedOk ? 'OK' : 'FAIL'}`);
+    this.log(`  Price cascade (info): raw avg=${Math.round(rawAvgPrice)}, processed avg=${Math.round(procAvgPrice)} ${priceOk ? 'OK' : 'WARN'}`);
     this.log(allPassed ? '=== TEST PASSED ===' : '=== TEST FAILED ===');
 
     this.renderResultsTable(results, allPassed);

@@ -21,6 +21,7 @@ export class MapEditorUI {
     this.onSimulationToggle = null;
     this.onSimulationSpeedChange = null;
     this.onGenerateRandomFactories = null;
+    this.simTickLabel = null;
 
     this.init();
   }
@@ -195,7 +196,7 @@ export class MapEditorUI {
     speedSlider.type = 'range';
     speedSlider.className = 'speed-slider';
     speedSlider.min = '0.5';
-    speedSlider.max = '4';
+    speedSlider.max = '100';
     speedSlider.step = '0.5';
     speedSlider.value = '1';
     speedSlider.addEventListener('input', (e) => {
@@ -207,6 +208,11 @@ export class MapEditorUI {
     });
     speedContainer.appendChild(speedSlider);
     simulationSection.appendChild(speedContainer);
+
+    this.simTickLabel = document.createElement('div');
+    this.simTickLabel.className = 'sim-tick-label';
+    this.simTickLabel.textContent = 'Ticks: 0';
+    simulationSection.appendChild(this.simTickLabel);
 
     // Factory count input
     const factoryCountContainer = document.createElement('div');
@@ -765,6 +771,12 @@ export class MapEditorUI {
     if (this.simPlayPauseBtn) {
       this.simPlayPauseBtn.textContent = running ? 'Pause' : 'Start';
       this.simPlayPauseBtn.classList.toggle('active', running);
+    }
+  }
+
+  setSimulationTick(tickCount) {
+    if (this.simTickLabel) {
+      this.simTickLabel.textContent = `Ticks: ${tickCount}`;
     }
   }
 

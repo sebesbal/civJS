@@ -57,7 +57,8 @@ function getOrCreateSimulationEngine() {
     tradeRenderer = new TradeRenderer(scene, simulationEngine, tilemap);
 
     // Live refresh of properties panel and factory overview on each tick
-    simulationEngine.onTick = () => {
+    simulationEngine.onTick = (tickCount) => {
+      ui.setSimulationTick(tickCount);
       const selectedObject = mapEditor.getSelectedObject();
       if (selectedObject && simulationEngine) {
         const actorState = simulationEngine.getActorState(selectedObject.id);
@@ -156,6 +157,7 @@ ui.onSimulationToggle = () => {
     ui.setSimulationRunning(false);
   } else {
     engine.initialize();
+    ui.setSimulationTick(engine.tickCount);
     engine.start();
     ui.setSimulationRunning(true);
   }
@@ -252,6 +254,7 @@ ui.onLoadGame = async (file) => {
     if (gameState.simulation) {
       const engine = getOrCreateSimulationEngine();
       engine.loadFromData(gameState.simulation);
+      ui.setSimulationTick(engine.tickCount);
       ui.setSimulationRunning(engine.isRunning);
       ui.factoryOverviewUI.setSimulationEngine(engine);
     }
