@@ -32,6 +32,15 @@ An automatic agent (not a map object). Connects a supplier's output storage to a
 - Visualized as a colored path line + animated sphere on the map
 - Created automatically when a profitable trade opportunity exists
 
+### Contract
+
+A persistent agreement between two actors to exchange a fixed amount of one product at a fixed unit price.
+
+- Contracts are created from local trade opportunities
+- Contracts execute repeatedly (shipments are created automatically)
+- Each actor has a limited contract capacity (~10 contracts)
+- If capacity is full, an actor may replace its worst contract with a better one
+
 ## Storage Model
 
 Each storage slot has:
@@ -76,18 +85,19 @@ Effect: full storage drives prices down (want to sell), empty storage drives pri
    a. Produce normally, but output is discarded (not added to storage)
    b. This represents the economy's end consumption (military, buildings, research)
 
-## Trading Logic (per tick)
+## Trading Logic (contract-based)
 
-1. Scan all actors with output surplus (current > ideal in output storage)
-2. For each surplus product, find all actors that need it as input (current < capacity in input storage)
-3. For each potential trade:
-   a. Compute shortest path between source and destination via A*
-   b. Calculate transport cost = path length * fuel cost per tile
-   c. Trade is profitable if: source sell price + transport cost < destination buy price
-4. Create a trader agent: withdraw goods from source output storage, begin transport
-5. Trader moves along the tile path at a fixed speed
-6. On arrival: deliver goods to destination input storage
-7. Multiple traders operate simultaneously
+1. Maintain existing contracts:
+   a. Drop invalid contracts (missing actors/storage/path)
+   b. Track repeated execution failures and cancel stale contracts
+2. Discover new opportunities:
+   a. For each available source output, find the best buyer (deficit + route cost score)
+   b. If no matching contract exists, create one
+   c. If an actor is at contract capacity, replace its worst contract only when the new one scores higher
+3. Execute contracts:
+   a. For each contract, spawn shipment(s) automatically when source stock, destination capacity, path, and fuel are available
+   b. Shipment amount is fixed per contract
+4. Trader agents then move along paths and deliver cargo as before
 
 ## Pathfinding
 
@@ -158,9 +168,10 @@ Sidebar section with:
 
 ## Save/Load
 
-Save format version 2 adds:
+Save format version 3 adds:
 - `simulation` field containing:
   - Actor states (storage levels, production progress, prices)
+  - Contracts (source, destination, product, fixed shipment amount, fixed unit price, score)
   - Active traders (position, path, cargo)
   - Simulation metadata (tick count, speed, running state)
-- Backward compatible: v1 saves load without simulation data (empty storage)
+- Backward compatible: v1/v2 saves load without contracts
