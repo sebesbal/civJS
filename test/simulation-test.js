@@ -9,8 +9,9 @@ import { SimulationEngine } from '../simulation/simulation-engine.js';
 import { FactoryOverviewAggregator } from '../factory-overview/factory-overview-aggregator.js';
 
 export class SimulationTest {
-  constructor(container) {
+  constructor(container, options = {}) {
     this.container = container;
+    this.factoryOverviewUI = options.factoryOverviewUI || null;
     this.economyManager = null;
     this.objectManager = null;
     this.tilemap = null;
@@ -104,6 +105,9 @@ export class SimulationTest {
   }
 
   setupSimulationEnvironment() {
+    // Dispose previous run resources first so a new run starts clean.
+    this.cleanup();
+
     // Offscreen Three.js scene (no rendering needed)
     this.scene = new THREE.Scene();
 
@@ -157,6 +161,13 @@ export class SimulationTest {
     }
   }
 
+  async _syncFactoryOverview() {
+    if (!this.factoryOverviewUI || !this.economyManager || !this.simulationEngine) return;
+    await this.factoryOverviewUI.setEconomyManager(this.economyManager);
+    this.factoryOverviewUI.setSimulationEngine(this.simulationEngine);
+    this.factoryOverviewUI.onSimulationTick();
+  }
+
   async runTest() {
     if (this.running) return;
     this.running = true;
@@ -168,6 +179,7 @@ export class SimulationTest {
 
     this.log('--- Setting up simulation environment ---');
     this.setupSimulationEnvironment();
+    await this._syncFactoryOverview();
 
     this.log(`--- Running ${this.tickTarget} ticks ---`);
     const startTime = performance.now();
@@ -181,6 +193,10 @@ export class SimulationTest {
           this.simulationEngine.tick();
           this._sampleRuntimeStats();
           ticksDone++;
+        }
+        // Keep Factory Overview data live while test runs.
+        if (ticksDone % 20 === 0 || ticksDone >= this.tickTarget) {
+          this.factoryOverviewUI?.onSimulationTick();
         }
         // Progress update every 50 ticks
         if (ticksDone % 50 === 0 || ticksDone >= this.tickTarget) {
@@ -201,9 +217,7 @@ export class SimulationTest {
 
     // Evaluate results
     this.evaluateResults();
-
-    // Cleanup Three.js resources
-    this.cleanup();
+    await this._syncFactoryOverview();
 
     this.running = false;
     this.runBtn.disabled = false;

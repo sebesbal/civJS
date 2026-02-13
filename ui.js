@@ -200,7 +200,9 @@ export class UIManager {
       this.objectSceneTest = new ObjectSceneTest(this.testTabContainers.test2);
     }
     if (tabName === 'test3' && !this.simulationTest) {
-      this.simulationTest = new SimulationTest(this.testTabContainers.test3);
+      this.simulationTest = new SimulationTest(this.testTabContainers.test3, {
+        factoryOverviewUI: this.factoryOverviewUI
+      });
     }
   }
 
