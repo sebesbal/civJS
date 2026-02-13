@@ -44,12 +44,16 @@ export class ActorState {
   initializeProducerStorage(economyManager, inputCapacity = 30, outputCapacity = 24) {
     const node = economyManager.getNode(this.productId);
     if (!node) return;
+    const fuelProductId = economyManager.getFuelProductId();
 
     // Store recipe for cost-based pricing
     this.recipe = node.inputs.map(inp => ({ productId: inp.productId, amount: inp.amount }));
 
     const inputIdealMax = Math.max(DEFAULT_IDEAL_RANGE_SIZE, Math.floor(inputCapacity * 0.4));
-    const outputIdealMax = Math.max(DEFAULT_IDEAL_RANGE_SIZE, Math.floor(outputCapacity * 0.3));
+    const effectiveOutputCapacity = this.productId === fuelProductId
+      ? Math.max(outputCapacity, 40)
+      : outputCapacity;
+    const outputIdealMax = Math.max(DEFAULT_IDEAL_RANGE_SIZE, Math.floor(effectiveOutputCapacity * 0.3));
 
     // Input storage: one slot per recipe input
     for (const input of node.inputs) {
@@ -64,13 +68,12 @@ export class ActorState {
     // Output storage: one slot for the produced product
     this.outputStorage.set(this.productId, {
       current: 0,
-      capacity: outputCapacity,
+      capacity: effectiveOutputCapacity,
       idealMin: 0,
       idealMax: outputIdealMax
     });
 
     // Add fuel storage if fuel is designated and not already in inputs/outputs
-    const fuelProductId = economyManager.getFuelProductId();
     if (fuelProductId !== null && fuelProductId !== this.productId) {
       const hasInInput = this.inputStorage.has(fuelProductId);
       const hasInOutput = this.outputStorage.has(fuelProductId);

@@ -38,8 +38,22 @@ export class FactoryOverviewAggregator {
       // Status counts
       const statusCounts = { producing: 0, idle: 0, output_full: 0, output_surplus: 0, missing_inputs: 0 };
       for (const s of states) {
-        if (statusCounts[s.status] !== undefined) {
-          statusCounts[s.status]++;
+        const out = s.outputStorage.get(productId);
+        if (out && out.capacity > 0) {
+          if (out.current >= out.capacity) {
+            statusCounts.output_full++;
+            continue;
+          }
+          if (out.idealMax !== undefined && out.current > out.idealMax) {
+            statusCounts.output_surplus++;
+            continue;
+          }
+        }
+
+        if (s.status === 'producing') {
+          statusCounts.producing++;
+        } else if (s.status === 'missing_inputs') {
+          statusCounts.missing_inputs++;
         } else {
           statusCounts.idle++;
         }

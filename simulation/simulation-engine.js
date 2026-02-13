@@ -44,10 +44,11 @@ export class SimulationEngine {
     // Trade evaluation interval (not every tick to save CPU)
     this._tradeEvalCounter = 0;
     this._tradeEvalInterval = 1; // evaluate trades every tick for steadier replenishment
-    this.maxContractsPerActor = 10;
+    this.maxContractsPerActor = 12;
     this.maxConcurrentTradersPerContract = 3;
+    this.maxConcurrentTradersPerContractCap = 12;
     this.contractReplacementMargin = 1.25; // replacement requires meaningfully better score
-    this.minContractLifetimeTicks = 25; // avoid rapid churn right after creation
+    this.minContractLifetimeTicks = 10; // avoid rapid churn, but allow missing-input reroutes sooner
     this.transportCostWeight = 2.0; // stronger bias toward shorter/cheaper routes
 
     // Cost model constants
@@ -146,19 +147,19 @@ export class SimulationEngine {
   tick() {
     this.tickCount++;
 
-    // Phase 1: Production
+    // Phase 1: Transport (move active traders)
+    this._runTransport();
+
+    // Phase 2: Production
     this._runProduction();
 
-    // Phase 2: Trading (evaluate new trades periodically)
+    // Phase 3: Trading (evaluate new trades periodically)
     this._tradeEvalCounter++;
     if (this._tradeEvalCounter >= this._tradeEvalInterval) {
       this._computeMinInputPrices();
       this._evaluateTradeOpportunities();
       this._tradeEvalCounter = 0;
     }
-
-    // Phase 3: Transport (move active traders)
-    this._runTransport();
 
     // Phase 4: Pricing
     this._updateAllPrices();
@@ -336,6 +337,7 @@ export class SimulationEngine {
   _evaluateTradeOpportunities() {
     this._maintainContracts();
     this._discoverContracts();
+    this._discoverRecoveryContracts();
     this._executeContracts();
   }
 
@@ -406,20 +408,96 @@ export class SimulationEngine {
     }
   }
 
+  _discoverRecoveryContracts() {
+    for (const buyerState of this.actorStates.values()) {
+      if (buyerState.type !== 'PRODUCER') continue;
+      if (buyerState.status !== 'missing_inputs') continue;
+      if (!buyerState.recipe || buyerState.recipe.length === 0) continue;
+
+      for (const inp of buyerState.recipe) {
+        const storage = buyerState.inputStorage.get(inp.productId);
+        if (!storage) continue;
+        if (storage.current >= inp.amount) continue;
+
+        const bestSource = this._findBestSourceForBuyerInput(inp.productId, buyerState);
+        if (!bestSource) continue;
+
+        const existing = this._getContract(bestSource.state.objectId, buyerState.objectId, inp.productId);
+        if (existing) {
+          existing.score = Math.max(existing.score, bestSource.score);
+          continue;
+        }
+
+        const amountPerShipment = Math.max(1, Math.min(10, Math.ceil(inp.amount * 2)));
+        const candidate = {
+          sourceObjectId: bestSource.state.objectId,
+          destObjectId: buyerState.objectId,
+          productId: inp.productId,
+          amountPerShipment,
+          unitPrice: Math.ceil(bestSource.state.getSellPrice(inp.productId)),
+          score: bestSource.score
+        };
+        this._addOrReplaceRecoveryContract(candidate, buyerState.objectId);
+      }
+    }
+  }
+
+  _findBestSourceForBuyerInput(productId, buyerState) {
+    let best = null;
+    let bestScore = -Infinity;
+    const fuelProductId = this.economyManager.getFuelProductId();
+
+    for (const sourceState of this.actorStates.values()) {
+      if (sourceState.objectId === buyerState.objectId) continue;
+
+      const sourceOutput = sourceState.outputStorage.get(productId);
+      if (!sourceOutput || sourceOutput.current < 1) continue;
+
+      const transportCost = this._getTransportCost(sourceState.objectId, buyerState.objectId);
+      if (transportCost === null) continue;
+
+      if (fuelProductId !== null) {
+        const fuelStorage = sourceState.outputStorage.get(fuelProductId) ||
+          sourceState.inputStorage.get(fuelProductId);
+        if (!fuelStorage || fuelStorage.current < transportCost) continue;
+      }
+
+      const sell = sourceState.getSellPrice(productId);
+      const totalCost = sell + transportCost;
+      // Recovery preference: strongly favor reachable low-cost sources.
+      const score = 1000 / (1 + totalCost);
+      if (score > bestScore) {
+        bestScore = score;
+        best = { state: sourceState, score };
+      }
+    }
+
+    return best;
+  }
+
   _executeContracts() {
-    const maxActiveTraders = Math.max(50, this.actorStates.size * 4);
+    const maxActiveTraders = Math.max(80, this.actorStates.size * 6);
+    const contractsToRun = [...this.contracts].sort(
+      (a, b) => this._getContractPriority(b) - this._getContractPriority(a)
+    );
 
-    for (const contract of this.contracts) {
+    for (const contract of contractsToRun) {
       if (this.activeTraders.length >= maxActiveTraders) return;
-
-      const concurrent = this.activeTraders.filter(t => t.contractId === contract.id).length;
-      if (concurrent >= this.maxConcurrentTradersPerContract) continue;
 
       const sourceState = this.actorStates.get(contract.sourceObjectId);
       const destState = this.actorStates.get(contract.destObjectId);
       if (!sourceState || !destState) {
         continue;
       }
+
+      const path = this._getPathBetweenObjects(contract.sourceObjectId, contract.destObjectId);
+      if (!path || path.length < 2) {
+        continue;
+      }
+
+      const concurrentLimit = this._getContractConcurrencyLimit(contract, destState, path);
+      const concurrent = this.activeTraders.filter(t => t.contractId === contract.id).length;
+      if (concurrent >= concurrentLimit) continue;
 
       const sourceStorage = sourceState.outputStorage.get(contract.productId);
       const destStorage = this._getDestinationStorageForProduct(destState, contract.productId);
@@ -449,11 +527,6 @@ export class SimulationEngine {
         continue;
       }
 
-      const path = this._getPathBetweenObjects(contract.sourceObjectId, contract.destObjectId);
-      if (!path || path.length < 2) {
-        continue;
-      }
-
       const fuelRequired = this._computePathFuelCost(path);
       const created = this._createTrader(
         sourceState,
@@ -468,7 +541,48 @@ export class SimulationEngine {
     }
   }
 
-  _addOrReplaceContract(candidate) {
+  _getContractConcurrencyLimit(contract, destState, path) {
+    let limit = this.maxConcurrentTradersPerContract;
+
+    if (destState.type === 'PRODUCER') {
+      const recipeItem = destState.recipe.find(inp => inp.productId === contract.productId);
+      if (recipeItem) {
+        const leadTicks = Math.max(1, path.length - 1);
+        const demandPerTick = recipeItem.amount * (destState.productionRate ?? 1);
+        const amountPerShipment = Math.max(1, contract.amountPerShipment ?? 1);
+        const requiredPipeline = demandPerTick * (leadTicks + 3);
+        const neededConcurrent = Math.ceil(requiredPipeline / amountPerShipment);
+        limit = Math.max(limit, neededConcurrent);
+      }
+    }
+
+    return Math.max(
+      this.maxConcurrentTradersPerContract,
+      Math.min(this.maxConcurrentTradersPerContractCap, limit)
+    );
+  }
+
+  _getContractPriority(contract) {
+    let priority = contract.score ?? 0;
+
+    const destState = this.actorStates.get(contract.destObjectId);
+    if (!destState || destState.type !== 'PRODUCER') return priority;
+
+    const storage = destState.inputStorage.get(contract.productId);
+    if (!storage) return priority;
+
+    const recipeItem = destState.recipe.find(inp => inp.productId === contract.productId);
+    if (!recipeItem) return priority;
+
+    const deficit = Math.max(0, recipeItem.amount - storage.current);
+    if (destState.status === 'missing_inputs' && deficit > 0) {
+      priority += 1000 + (deficit * 100);
+    }
+
+    return priority;
+  }
+
+  _addOrReplaceContract(candidate, force = false) {
     const sourceCount = this._countActorContracts(candidate.sourceObjectId);
     const destCount = this._countActorContracts(candidate.destObjectId);
     const sourceHasSpace = sourceCount < this.maxContractsPerActor;
@@ -492,13 +606,43 @@ export class SimulationEngine {
       if (contract.score < worst.score) worst = contract;
     }
 
-    // Do not churn very fresh contracts; let flows stabilize first.
-    if (this.tickCount - (worst.createdTick ?? 0) < this.minContractLifetimeTicks) return;
-    // Require a strong improvement before replacing.
-    if (candidate.score <= worst.score * this.contractReplacementMargin) return;
+    if (!force) {
+      // Do not churn very fresh contracts; let flows stabilize first.
+      if (this.tickCount - (worst.createdTick ?? 0) < this.minContractLifetimeTicks) return;
+      // Require a strong improvement before replacing.
+      if (candidate.score <= worst.score * this.contractReplacementMargin) return;
+    }
 
     this.contracts = this.contracts.filter(contract => contract.id !== worst.id);
     this._createContract(candidate);
+  }
+
+  _addOrReplaceRecoveryContract(candidate, blockedBuyerObjectId) {
+    const existing = this._getContract(
+      candidate.sourceObjectId,
+      candidate.destObjectId,
+      candidate.productId
+    );
+    if (existing) {
+      existing.score = Math.max(existing.score ?? 0, candidate.score ?? 0);
+      return;
+    }
+
+    if (this._countActorContracts(blockedBuyerObjectId) >= this.maxContractsPerActor) {
+      const buyerContracts = this.contracts.filter(c =>
+        c.sourceObjectId === blockedBuyerObjectId || c.destObjectId === blockedBuyerObjectId
+      );
+
+      if (buyerContracts.length > 0) {
+        let worst = buyerContracts[0];
+        for (const c of buyerContracts) {
+          if ((c.score ?? -Infinity) < (worst.score ?? -Infinity)) worst = c;
+        }
+        this.contracts = this.contracts.filter(c => c.id !== worst.id);
+      }
+    }
+
+    this._addOrReplaceContract(candidate);
   }
 
   _createContract(candidate) {
@@ -644,6 +788,36 @@ export class SimulationEngine {
     return urgency;
   }
 
+  _getFuelLogisticsUrgency(candidateState, fuelProductId) {
+    if (candidateState.type !== 'PRODUCER') return 1;
+
+    const fuelStorage = candidateState.inputStorage.get(fuelProductId) ||
+      candidateState.outputStorage.get(fuelProductId);
+    if (!fuelStorage || fuelStorage.capacity <= 0) return 1;
+
+    // Low fuel should increase priority for incoming fuel.
+    const fuelFill = fuelStorage.current / fuelStorage.capacity;
+    let urgency = 1 + Math.max(0, 0.35 - fuelFill) * 3.0;
+
+    // If non-fuel outputs are stranded above ideal, prioritize refueling to unlock exports.
+    let strandedPressure = 0;
+    let strandedCount = 0;
+    for (const [pid, storage] of candidateState.outputStorage) {
+      if (pid === fuelProductId) continue;
+      const ideal = this._getIdealTarget(storage);
+      if (storage.capacity <= 0) continue;
+      const pressure = Math.max(0, (storage.current - ideal) / storage.capacity);
+      strandedPressure += pressure;
+      strandedCount += 1;
+    }
+    if (strandedCount > 0) {
+      const avgPressure = strandedPressure / strandedCount;
+      urgency *= 1 + (avgPressure * 2.5);
+    }
+
+    return urgency;
+  }
+
   _getMinimumSellPrice(sourceState, productId) {
     if (sourceState.type !== 'PRODUCER') {
       return 1;
@@ -730,6 +904,9 @@ export class SimulationEngine {
         const recipeNeedsFuel = !!node && node.inputs.some(inp => inp.productId === fuelProductId);
         if (!recipeNeedsFuel) {
           score *= 0.2;
+        } else {
+          // Prioritize fuel for factories that are fuel-starved and have stranded exports.
+          score *= this._getFuelLogisticsUrgency(candidateState, fuelProductId);
         }
       }
 
