@@ -88,6 +88,16 @@ export class SimulationEngine {
       const productId = parseInt(obj.type.split('_')[1]);
       const state = new ActorState(obj.id, 'PRODUCER', productId);
       state.initializeProducerStorage(this.economyManager);
+
+      // Bootstrap: seed raw-material outputs with a small startup buffer.
+      // This reduces early-chain starvation and stabilizes uptime.
+      if (state.isRawMaterial()) {
+        const out = state.outputStorage.get(productId);
+        if (out) {
+          const seedAmount = Math.max(2, Math.floor(out.capacity * 0.25));
+          out.current = Math.min(out.capacity, seedAmount);
+        }
+      }
       this.actorStates.set(obj.id, state);
     }
   }
@@ -561,8 +571,10 @@ export class SimulationEngine {
   _destinationCancelsContract(destState, productId) {
     const storage = this._getDestinationStorageForProduct(destState, productId);
     if (!storage) return true;
-    // If storage is above ideal, actor should not buy this product.
-    return this._isAboveIdeal(storage);
+    // Hysteresis: only cancel when meaningfully above ideal to avoid contract thrashing.
+    const ideal = this._getIdealTarget(storage);
+    const cancelBand = Math.max(1, Math.floor(storage.capacity * 0.15));
+    return storage.current > (ideal + cancelBand);
   }
 
   _isAboveIdeal(storage) {

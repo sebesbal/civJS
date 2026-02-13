@@ -41,7 +41,7 @@ export class ActorState {
    * Initialize storage for a producer (factory).
    * Creates input slots for each recipe input, and one output slot for the produced product.
    */
-  initializeProducerStorage(economyManager, inputCapacity = 20, outputCapacity = 20) {
+  initializeProducerStorage(economyManager, inputCapacity = 30, outputCapacity = 24) {
     const node = economyManager.getNode(this.productId);
     if (!node) return;
 
