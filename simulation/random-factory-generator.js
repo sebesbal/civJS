@@ -16,18 +16,15 @@ export class RandomFactoryGenerator {
     const nodes = economyManager.getAllNodes();
     if (nodes.length === 0) return [];
 
-    // Calculate factory counts based on consumption demand
-    const factoryCounts = this._calculateFactoryCounts(economyManager, nodes, totalFactories);
-    const fuelProductId = economyManager.getFuelProductId();
-
-    // Non-fuel raw materials are often overprovisioned by pure demand scaling.
-    // Trim them to improve utilization without starving the chain.
-    for (const node of nodes) {
-      if (node.inputs.length !== 0) continue;
-      if (node.id === fuelProductId) continue;
-      const current = factoryCounts.get(node.id) || 1;
-      factoryCounts.set(node.id, Math.max(1, Math.ceil(current * 0.5)));
-    }
+    // Calculate factory counts based on transport-aware consumption demand.
+    const factoryCounts = this._calculateFactoryCounts(
+      economyManager,
+      nodes,
+      tilemap,
+      minSpacing,
+      totalFactories,
+      options
+    );
 
     // Find valid tiles (non-water, unoccupied)
     const validTiles = this._getValidTiles(tilemap, objectManager, minSpacing);
@@ -84,6 +81,7 @@ export class RandomFactoryGenerator {
     }
 
     const validTiles = [];
+    const acceptedPositions = new Set();
     for (const tile of tilemap.tiles) {
       // Skip water tiles (tileTypeIndex 0=Deep Sea, 1=Sea, 2=Shallow Water)
       if (tile.userData.tileTypeIndex < 3) continue;
@@ -106,9 +104,21 @@ export class RandomFactoryGenerator {
       }
       if (tooClose) continue;
 
+      // Also enforce spacing among newly accepted candidate tiles.
+      for (const key of acceptedPositions) {
+        const [ax, az] = key.split(',').map(Number);
+        const dist = Math.abs(gx - ax) + Math.abs(gz - az);
+        if (dist < minSpacing) {
+          tooClose = true;
+          break;
+        }
+      }
+      if (tooClose) continue;
+
       const worldX = gx * config.tileSize - offset;
       const worldZ = gz * config.tileSize - offset;
       validTiles.push({ gridX: gx, gridZ: gz, worldX, worldZ });
+      acceptedPositions.add(`${gx},${gz}`);
     }
 
     return validTiles;
@@ -121,8 +131,11 @@ export class RandomFactoryGenerator {
    * @param {Array} nodes - all economy nodes
    * @param {number|null} totalFactories - target total number of factories (null = auto-scale)
    */
-  _calculateFactoryCounts(economyManager, nodes, totalFactories = null) {
+  _calculateFactoryCounts(economyManager, nodes, tilemap, minSpacing, totalFactories = null, options = {}) {
     const factoryCounts = new Map();
+    const fuelProductId = economyManager.getFuelProductId();
+    const depths = economyManager.calculateDepths();
+    const transportFriction = this._estimateTransportFriction(tilemap, minSpacing, options);
 
     // Step 1: Find sink nodes (products not consumed by anyone)
     const sinkNodes = new Set();
@@ -144,7 +157,8 @@ export class RandomFactoryGenerator {
       demand.set(node.id, sinkNodes.has(node.id) ? 1.0 : 0.0);
     }
 
-    // Propagate demand upstream through the dependency graph
+    // Propagate demand upstream through the dependency graph.
+    // Add transport friction so upstream and fuel capacity are not underbuilt.
     // We need to iterate multiple times to handle complex graphs
     const maxIterations = nodes.length;
     for (let iter = 0; iter < maxIterations; iter++) {
@@ -156,13 +170,30 @@ export class RandomFactoryGenerator {
         // This node's demand determines input demand
         const nodeDemand = demand.get(node.id);
         if (nodeDemand === 0) continue;
+        const nodeDepth = depths.get(node.id) ?? 0;
+        const chainDistanceFactor = 1 + (nodeDepth * 0.2);
 
         // Each factory producing this node consumes its inputs
+        let movedInputUnits = 0;
         for (const input of node.inputs) {
           const currentDemand = demand.get(input.productId);
-          const newDemand = currentDemand + (nodeDemand * input.amount);
+          const transportMultiplier = 1 + (transportFriction * chainDistanceFactor);
+          const incrementalDemand = nodeDemand * input.amount * transportMultiplier;
+          movedInputUnits += nodeDemand * input.amount;
+          const newDemand = currentDemand + incrementalDemand;
           if (Math.abs(newDemand - currentDemand) > 0.001) {
             demand.set(input.productId, newDemand);
+            changed = true;
+          }
+        }
+
+        // Every moved input unit consumes transport fuel across expected routes.
+        if (fuelProductId !== null) {
+          const fuelCurrent = demand.get(fuelProductId) ?? 0;
+          const fuelIncrement = movedInputUnits * transportFriction;
+          const fuelNew = fuelCurrent + fuelIncrement;
+          if (Math.abs(fuelNew - fuelCurrent) > 0.001) {
+            demand.set(fuelProductId, fuelNew);
             changed = true;
           }
         }
@@ -182,7 +213,6 @@ export class RandomFactoryGenerator {
 
     if (maxDemand === 0) {
       // Fallback: use depth-based approach
-      const depths = economyManager.calculateDepths();
       for (const node of nodes) {
         const depth = depths.get(node.id) ?? 0;
         let count;
@@ -194,40 +224,85 @@ export class RandomFactoryGenerator {
       return factoryCounts;
     }
 
-    // Distribute factories based on relative demand
     if (totalFactories !== null && totalFactories > 0) {
-      // User specified a total - distribute proportionally
-      let allocatedFactories = 0;
-      const sortedNodes = [...nodes].sort((a, b) => demand.get(b.id) - demand.get(a.id));
-
-      for (let i = 0; i < sortedNodes.length; i++) {
-        const node = sortedNodes[i];
-        const nodeDemand = demand.get(node.id);
-
-        if (i === sortedNodes.length - 1) {
-          // Last product gets remaining factories (ensures we hit the target exactly)
-          const count = Math.max(1, totalFactories - allocatedFactories);
-          factoryCounts.set(node.id, count);
-          allocatedFactories += count;
-        } else {
-          // Proportional allocation based on demand
-          const ratio = nodeDemand / totalDemand;
-          const count = Math.max(1, Math.round(totalFactories * ratio));
-          factoryCounts.set(node.id, count);
-          allocatedFactories += count;
-        }
-      }
+      // User specified a total - distribute proportionally and exactly.
+      this._allocateCountsByDemand(factoryCounts, nodes, demand, totalFactories);
     } else {
-      // Auto-scale: allow single-factory products for low-demand/deep-chain nodes.
-      for (const node of nodes) {
-        const nodeDemand = demand.get(node.id);
-        const ratio = nodeDemand / maxDemand;
-        const count = Math.max(1, Math.min(16, Math.round(ratio * 16)));
-        factoryCounts.set(node.id, count);
-      }
+      // Auto-scale: size overall capacity by transport friction to avoid chronic starvation.
+      const autoTotal = Math.max(
+        nodes.length,
+        Math.round(nodes.length * (2.0 + transportFriction * 2.5))
+      );
+      this._allocateCountsByDemand(factoryCounts, nodes, demand, autoTotal);
     }
 
     return factoryCounts;
+  }
+
+  _estimateTransportFriction(tilemap, minSpacing, options) {
+    if (typeof options.transportFriction === 'number' && options.transportFriction >= 0) {
+      return options.transportFriction;
+    }
+
+    const config = tilemap.getConfig();
+    const mapSize = config?.mapSize ?? 40;
+    // Expected random Manhattan distance in a square is ~2N/3.
+    const expectedRouteLength = Math.max(4, (2 * mapSize) / 3 - minSpacing);
+    const expectedFuelPerTile = options.expectedFuelCostPerTile ?? 0.08;
+    const expectedShipmentUnits = Math.max(1, options.expectedShipmentUnits ?? 5);
+    const expectedFuelPerUnit = (expectedRouteLength * expectedFuelPerTile) / expectedShipmentUnits;
+
+    // Clamp to a stable planning range.
+    return Math.max(0, Math.min(1.5, expectedFuelPerUnit));
+  }
+
+  _allocateCountsByDemand(factoryCounts, nodes, demand, totalFactories) {
+    factoryCounts.clear();
+    if (nodes.length === 0) return;
+
+    const minPerNode = totalFactories >= nodes.length ? 1 : 0;
+    const baseAllocated = minPerNode * nodes.length;
+    let remaining = Math.max(0, totalFactories - baseAllocated);
+
+    let totalDemand = 0;
+    for (const node of nodes) {
+      totalDemand += Math.max(0, demand.get(node.id) ?? 0);
+    }
+
+    if (totalDemand <= 0) {
+      // Even fallback for degenerate cases.
+      const equalShare = nodes.length > 0 ? Math.floor(remaining / nodes.length) : 0;
+      let leftover = remaining - (equalShare * nodes.length);
+      for (const node of nodes) {
+        let count = minPerNode + equalShare;
+        if (leftover > 0) {
+          count += 1;
+          leftover -= 1;
+        }
+        factoryCounts.set(node.id, count);
+      }
+      return;
+    }
+
+    // Largest-remainder proportional allocation.
+    const quotas = [];
+    let assigned = 0;
+    for (const node of nodes) {
+      const nodeDemand = Math.max(0, demand.get(node.id) ?? 0);
+      const exact = (nodeDemand / totalDemand) * remaining;
+      const floor = Math.floor(exact);
+      quotas.push({ nodeId: node.id, floor, remainder: exact - floor });
+      assigned += floor;
+      factoryCounts.set(node.id, minPerNode + floor);
+    }
+
+    let toDistribute = remaining - assigned;
+    quotas.sort((a, b) => b.remainder - a.remainder);
+    for (let i = 0; i < quotas.length && toDistribute > 0; i++) {
+      const q = quotas[i];
+      factoryCounts.set(q.nodeId, (factoryCounts.get(q.nodeId) ?? minPerNode) + 1);
+      toDistribute -= 1;
+    }
   }
 
   /** Fisher-Yates shuffle */
