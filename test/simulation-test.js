@@ -25,6 +25,9 @@ export class SimulationTest {
     this.logLines = [];
     this.runtimeStatsByProduct = new Map();
     this.runtimeProductIds = [];
+    this.useFixedSeed = true;
+    this.fixedSeed = 1337;
+    this.lastRunSeed = null;
 
     this.init();
   }
@@ -72,6 +75,47 @@ export class SimulationTest {
     this.runBtn.addEventListener('click', () => this.runTest());
     controls.appendChild(this.runBtn);
 
+    // Seed mode checkbox
+    const seedModeLabel = document.createElement('label');
+    seedModeLabel.style.cssText = 'color: #aaa; display: inline-flex; align-items: center; gap: 6px;';
+    this.seedModeCheckbox = document.createElement('input');
+    this.seedModeCheckbox.type = 'checkbox';
+    this.seedModeCheckbox.checked = this.useFixedSeed;
+    this.seedModeCheckbox.addEventListener('change', () => {
+      this.useFixedSeed = this.seedModeCheckbox.checked;
+      this.seedInput.disabled = !this.useFixedSeed;
+    });
+    seedModeLabel.appendChild(this.seedModeCheckbox);
+    seedModeLabel.appendChild(document.createTextNode('Fixed Seed'));
+    controls.appendChild(seedModeLabel);
+
+    // Seed value input
+    const seedLabel = document.createElement('label');
+    seedLabel.textContent = 'Seed: ';
+    seedLabel.style.color = '#aaa';
+    this.seedInput = document.createElement('input');
+    this.seedInput.type = 'number';
+    this.seedInput.value = String(this.fixedSeed);
+    this.seedInput.min = '0';
+    this.seedInput.max = '4294967295';
+    this.seedInput.style.cssText = 'width: 110px; background: #333; color: #fff; border: 1px solid #555; padding: 4px;';
+    this.seedInput.addEventListener('change', () => {
+      this.fixedSeed = this._normalizeSeed(this.seedInput.value);
+      this.seedInput.value = String(this.fixedSeed);
+    });
+    seedLabel.appendChild(this.seedInput);
+    controls.appendChild(seedLabel);
+
+    // Optional helper button to create a new fixed seed quickly
+    this.newSeedBtn = document.createElement('button');
+    this.newSeedBtn.textContent = 'New Seed';
+    this.newSeedBtn.style.cssText = 'padding: 6px 10px; background: #555; color: #fff; border: none; cursor: pointer;';
+    this.newSeedBtn.addEventListener('click', () => {
+      this.fixedSeed = this._randomSeed();
+      this.seedInput.value = String(this.fixedSeed);
+    });
+    controls.appendChild(this.newSeedBtn);
+
     wrapper.appendChild(controls);
 
     // Results table
@@ -85,6 +129,36 @@ export class SimulationTest {
     wrapper.appendChild(this.logArea);
 
     this.container.appendChild(wrapper);
+  }
+
+  _normalizeSeed(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 1337;
+    return (Math.floor(n) >>> 0);
+  }
+
+  _randomSeed() {
+    return (Math.floor(Math.random() * 0x100000000) >>> 0);
+  }
+
+  _selectRunSeed() {
+    if (this.useFixedSeed) {
+      this.fixedSeed = this._normalizeSeed(this.seedInput.value);
+      this.seedInput.value = String(this.fixedSeed);
+      return this.fixedSeed;
+    }
+    return this._randomSeed();
+  }
+
+  _createSeededRng(seed) {
+    let t = seed >>> 0;
+    return () => {
+      t += 0x6D2B79F5;
+      let x = t;
+      x = Math.imul(x ^ (x >>> 15), x | 1);
+      x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+    };
   }
 
   async loadDefaultEconomy() {
@@ -113,7 +187,12 @@ export class SimulationTest {
 
     // Tilemap - match normal gameplay defaults.
     const mapSize = 40;
-    this.tilemap = new Tilemap(this.scene, { mapSize, tileSize: 1, tileHeight: 0.1 });
+    this.tilemap = new Tilemap(this.scene, {
+      mapSize,
+      tileSize: 1,
+      tileHeight: 0.1,
+      noiseSeed: this.lastRunSeed
+    });
 
     // Object manager + object types from economy
     this.objectManager = new ObjectManager(this.scene, this.tilemap);
@@ -122,8 +201,9 @@ export class SimulationTest {
 
     // Generate factories with the same defaults used by normal gameplay.
     const generator = new RandomFactoryGenerator();
-    const created = generator.generate(this.economyManager, this.objectManager, this.tilemap);
-    this.log(`Placed ${created.length} factories on ${mapSize}x${mapSize} map (fuel enabled)`);
+    const rng = this._createSeededRng(this.lastRunSeed);
+    const created = generator.generate(this.economyManager, this.objectManager, this.tilemap, { rng });
+    this.log(`Placed ${created.length} factories on ${mapSize}x${mapSize} map (fuel enabled, seed=${this.lastRunSeed})`);
 
     // Count per product
     const counts = new Map();
@@ -178,6 +258,8 @@ export class SimulationTest {
     this.logArea.textContent = '';
 
     this.log('--- Setting up simulation environment ---');
+    this.lastRunSeed = this._selectRunSeed();
+    this.log(`Seed mode: ${this.useFixedSeed ? 'fixed' : 'random'}, run seed=${this.lastRunSeed}`);
     this.setupSimulationEnvironment();
     await this._syncFactoryOverview();
 

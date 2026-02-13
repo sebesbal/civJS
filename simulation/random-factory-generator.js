@@ -12,6 +12,7 @@ export class RandomFactoryGenerator {
   generate(economyManager, objectManager, tilemap, options = {}) {
     const minSpacing = options.minSpacing ?? 2;
     const totalFactories = options.totalFactories ?? null;
+    const rng = typeof options.rng === 'function' ? options.rng : Math.random;
 
     const nodes = economyManager.getAllNodes();
     if (nodes.length === 0) return [];
@@ -34,7 +35,7 @@ export class RandomFactoryGenerator {
     }
 
     // Shuffle valid tiles for random placement
-    this._shuffle(validTiles);
+    this._shuffle(validTiles, rng);
 
     const createdIds = [];
     let tileIndex = 0;
@@ -306,9 +307,9 @@ export class RandomFactoryGenerator {
   }
 
   /** Fisher-Yates shuffle */
-  _shuffle(array) {
+  _shuffle(array, rng = Math.random) {
     for (let i = array.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(rng() * (i + 1));
       [array[i], array[j]] = [array[j], array[i]];
     }
   }

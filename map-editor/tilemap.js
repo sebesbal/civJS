@@ -8,6 +8,7 @@ export class Tilemap {
     this.mapSize = options.mapSize || 20;
     this.tileSize = options.tileSize || 1;
     this.tileHeight = options.tileHeight || 0.1;
+    this.noiseSeed = options.noiseSeed ?? null;
     this.tiles = [];
     this.heightMap = null;
     this.noiseGenerator = null;
@@ -43,7 +44,9 @@ export class Tilemap {
 
     // Generate height map if not loading from saved data
     if (!tileData) {
-      this.noiseGenerator = new NoiseGenerator();
+      this.noiseGenerator = this.noiseSeed === null
+        ? new NoiseGenerator()
+        : new NoiseGenerator(this.noiseSeed);
       this.heightMap = this.noiseGenerator.generateHeightMap(
         this.mapSize,
         this.mapSize,
