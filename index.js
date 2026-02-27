@@ -3,12 +3,14 @@ import { Tilemap } from './map-editor/tilemap.js';
 import { MapEditor } from './map-editor/map-editor.js';
 import { UIManager } from './ui.js';
 import { RouteManager } from './map-editor/routes.js';
-import { SaveLoadManager } from './map-editor/save-load.js';
 import { CameraController } from './map-editor/camera-controller.js';
 import { generateObjectTypesFromEconomy } from './map-editor/config/object-types.js';
 import { RandomFactoryGenerator } from './simulation/random-factory-generator.js';
-import { SimulationEngine } from './simulation/simulation-engine.js';
-import { TradeRenderer } from './simulation/trade-renderer.js';
+import { EconomyEditorService } from './application/economy/economy-editor-service.js';
+import { EconomyIOService } from './application/economy/economy-io-service.js';
+import { GameStateService } from './application/game/state-service.js';
+import { GameSessionService } from './application/game/game-session-service.js';
+import { JsonFilePersistence } from './ui/persistence/json-file-persistence.js';
 
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -41,45 +43,37 @@ const routeManager = new RouteManager(scene, tilemap);
 let mapEditor = new MapEditor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig(), routeManager);
 // Set tilemap reference in object manager for proper object positioning
 mapEditor.getObjectManager().setTilemap(tilemap);
-const ui = new UIManager();
+const economyEditorService = new EconomyEditorService();
+const economyIOService = new EconomyIOService();
+const filePersistence = new JsonFilePersistence();
+const gameStateService = new GameStateService();
+const ui = new UIManager({ economyEditorService, economyIOService, filePersistence });
 ui.setRenderer(renderer); // Set renderer reference so UI can hide/show it
-const saveLoadManager = new SaveLoadManager();
+const gameSessionService = new GameSessionService({
+  scene,
+  routeManager,
+  mapEditor,
+  tilemap,
+  economyEditorService
+});
 
 // Simulation engine and trade renderer (created lazily, initialized on first start)
 let simulationEngine = null;
 let tradeRenderer = null;
 
 function getOrCreateSimulationEngine() {
-  const economyManager = ui.economyEditorUI.economyManager;
-  const objectManager = mapEditor.getObjectManager();
-  if (!simulationEngine) {
-    simulationEngine = new SimulationEngine(economyManager, objectManager, routeManager, tilemap);
-    tradeRenderer = new TradeRenderer(scene, simulationEngine, tilemap);
-
-    // Live refresh of properties panel and factory overview on each tick
-    simulationEngine.onTick = (tickCount) => {
-      ui.setSimulationTick(tickCount);
-      const selectedObject = mapEditor.getSelectedObject();
-      if (selectedObject && simulationEngine) {
-        const actorState = simulationEngine.getActorState(selectedObject.id);
-        if (actorState) {
-          ui.showFactoryInspector(selectedObject, actorState, ui.economyEditorUI.economyManager);
-        }
+  simulationEngine = gameSessionService.getOrCreateSimulationEngine((tickCount) => {
+    ui.setSimulationTick(tickCount);
+    const selectedObject = mapEditor.getSelectedObject();
+    if (selectedObject && simulationEngine) {
+      const actorState = simulationEngine.getActorState(selectedObject.id);
+      if (actorState) {
+        ui.showFactoryInspector(selectedObject, actorState, economyEditorService.getGraph());
       }
-      // Update factory overview tab
-      ui.factoryOverviewUI.onSimulationTick();
-    };
-  } else {
-    // Update references in case tilemap/mapEditor were recreated (e.g., after load)
-    simulationEngine.economyManager = economyManager;
-    simulationEngine.objectManager = objectManager;
-    simulationEngine.routeManager = routeManager;
-    simulationEngine.tilemap = tilemap;
-    if (tradeRenderer) {
-      tradeRenderer.tilemap = tilemap;
-      tradeRenderer.simulationEngine = simulationEngine;
     }
-  }
+    ui.factoryOverviewUI.onSimulationTick();
+  });
+  tradeRenderer = gameSessionService.getTradeRenderer();
   return simulationEngine;
 }
 
@@ -125,23 +119,11 @@ function setupUICallbacks(ui, mapEditor, routeManager) {
 setupUICallbacks(ui, mapEditor, routeManager);
 
 // Economy Editor Save/Load callbacks
-ui.onSaveEconomy = () => {
-  if (ui.economyEditorUI) {
-    ui.economyEditorUI.saveEconomy();
-  }
-};
-
-ui.onLoadEconomy = async (file) => {
-  if (ui.economyEditorUI) {
-    await ui.economyEditorUI.loadEconomy(file);
-  }
-};
-
 // Simulation callbacks
 const randomFactoryGenerator = new RandomFactoryGenerator();
 
 ui.onGenerateRandomFactories = (totalFactories = null) => {
-  const economyManager = ui.economyEditorUI.economyManager;
+  const economyManager = economyEditorService.getGraph();
   const objectManager = mapEditor.getObjectManager();
   const options = { totalFactories };
   const created = randomFactoryGenerator.generate(economyManager, objectManager, tilemap, options);
@@ -173,16 +155,15 @@ ui.onSimulationSpeedChange = (speed) => {
 ui.onSaveGame = () => {
   try {
     const objectManager = mapEditor.getObjectManager();
-    const economyManager = ui.economyEditorUI.economyManager;
-    const gameStateJson = saveLoadManager.saveGameState(
+    const gameStateJson = gameStateService.saveGameState({
       tilemap,
       objectManager,
       routeManager,
-      economyManager,
+      economyGraph: economyEditorService.getGraph(),
       simulationEngine
-    );
+    });
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    saveLoadManager.downloadGameState(gameStateJson, `game-save-${timestamp}.json`);
+    filePersistence.downloadJson(gameStateJson, `game-save-${timestamp}.json`);
     console.log('Game saved successfully');
   } catch (error) {
     console.error('Failed to save game:', error);
@@ -193,21 +174,16 @@ ui.onSaveGame = () => {
 ui.onLoadGame = async (file) => {
   try {
     // Read file
-    const fileContent = await saveLoadManager.readFile(file);
+    const fileContent = await filePersistence.readFile(file);
     
     // Parse game state
-    const gameState = await saveLoadManager.loadGameState(fileContent);
+    const gameState = gameStateService.loadGameState(fileContent);
     
     // Stop simulation and clean up trade visuals
-    if (simulationEngine) {
-      simulationEngine.stop();
-      ui.setSimulationRunning(false);
-    }
-    if (tradeRenderer) {
-      tradeRenderer.dispose();
-    }
+    gameSessionService.disposeSimulation();
     simulationEngine = null;
     tradeRenderer = null;
+    ui.setSimulationRunning(false);
 
     // Clear existing scene objects (keep lights and camera)
     tilemap.clear();
@@ -226,15 +202,16 @@ ui.onLoadGame = async (file) => {
     
     // Recreate map editor with new tiles and map config
     mapEditor = new MapEditor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig(), routeManager);
+    gameSessionService.setRuntimeReferences({ mapEditor, tilemap, routeManager });
 
     // Reconnect UI callbacks
     setupUICallbacks(ui, mapEditor, routeManager);
 
     // Restore economy data if included in save, then regenerate object types
     if (gameState.economy) {
-      ui.economyEditorUI.economyManager.loadFromData(gameState.economy);
+      economyEditorService.loadEconomyData(gameState.economy);
     }
-    const objectTypes = generateObjectTypesFromEconomy(ui.economyEditorUI.economyManager);
+    const objectTypes = generateObjectTypesFromEconomy(economyEditorService.getGraph());
     ui.mapEditorUI.setObjectTypes(objectTypes);
 
     // Load objects
@@ -248,7 +225,7 @@ ui.onLoadGame = async (file) => {
     routeManager.loadFromData(gameState.routes, gameState.nextRouteId);
     
     // Update factory overview with economy data
-    ui.factoryOverviewUI.setEconomyManager(ui.economyEditorUI.economyManager);
+    ui.factoryOverviewUI.setEconomyManager(economyEditorService.getGraph());
 
     // Restore simulation state if present in save
     if (gameState.simulation) {
@@ -290,7 +267,7 @@ const onMouseDown = (event) => {
     if (currentMode === 'VIEW' && result.selectedObject) {
       const actorState = simulationEngine ? simulationEngine.getActorState(result.selectedObject.id) : null;
       if (actorState) {
-        ui.showFactoryInspector(result.selectedObject, actorState, ui.economyEditorUI.economyManager);
+        ui.showFactoryInspector(result.selectedObject, actorState, economyEditorService.getGraph());
       } else {
         ui.showPropertiesPanel(result.selectedObject);
       }
@@ -363,7 +340,7 @@ const onContextMenu = (event) => {
         // It's an object — show inspector if simulation is active, otherwise basic properties
         const actorState = simulationEngine ? simulationEngine.getActorState(result.id) : null;
         if (actorState) {
-          ui.showFactoryInspector(result, actorState, ui.economyEditorUI.economyManager);
+          ui.showFactoryInspector(result, actorState, economyEditorService.getGraph());
         } else {
           ui.showPropertiesPanel(result);
         }

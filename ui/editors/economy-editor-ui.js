@@ -1,29 +1,33 @@
 // Economy Editor UI - handles economy editor interface
 import * as THREE from 'three';
-import { OrthographicViewerBase } from '../utils/orthographic-viewer-base.js';
-import { EconomyManager } from './economy-manager.js';
-import { EconomyVisualizer } from './economy-visualizer.js';
-import { EconomySaveLoadManager } from './economy-save-load.js';
-import { RandomEconomyGenerator } from './random-economy-generator.js';
+import { OrthographicViewerBase } from '../../utils/orthographic-viewer-base.js';
+import { EconomyVisualizer } from '../visualizers/economy-visualizer.js';
+import { EconomyEditorService } from '../../application/economy/economy-editor-service.js';
+import { EconomyIOService } from '../../application/economy/economy-io-service.js';
+import { JsonFilePersistence } from '../persistence/json-file-persistence.js';
+import { ECONOMY_ICON_CATALOG } from '../viewers/economy-icon-catalog.js';
 
 export class EconomyEditorUI extends OrthographicViewerBase {
-  constructor() {
+  constructor({ economyEditorService = null, economyIOService = null, filePersistence = null } = {}) {
     super();
     
     this.container = null;
     this.sidebar = null;
     this.propertiesPanel = null;
     
-    this.economyManager = new EconomyManager();
-    this.saveLoadManager = new EconomySaveLoadManager();
-    this.randomGenerator = new RandomEconomyGenerator();
+    this.economyEditorService = economyEditorService || new EconomyEditorService();
+    this.economyEditorService.setIconCatalog(ECONOMY_ICON_CATALOG);
+    this.economyIOService = economyIOService || new EconomyIOService();
+    this.filePersistence = filePersistence || new JsonFilePersistence();
+    this.economyManager = this.economyEditorService.getGraph();
+    this.economyEditorService.subscribeEconomyChanged((graph) => {
+      this.economyManager = graph;
+    });
     this.visualizer = null;
     
     this.selectedNodeId = null;
     
-    // Callbacks
-    this.onSaveEconomy = null;
-    this.onLoadEconomy = null;
+    // Callback
     this.onEconomyChange = null; // Fired when economy is modified (add/edit/delete/load/generate)
     
     this.init();
@@ -46,7 +50,9 @@ export class EconomyEditorUI extends OrthographicViewerBase {
       }
     }
     
-    // Initialize visualizer with the economy manager (after loading default if available)
+    this.economyManager = this.economyEditorService.getGraph();
+
+    // Initialize visualizer with the economy graph (after loading default if available)
     try {
       await this.visualizer.setEconomyManager(this.economyManager);
     } catch (err) {
@@ -64,8 +70,9 @@ export class EconomyEditorUI extends OrthographicViewerBase {
   // Load default economy file
   async loadDefaultEconomy() {
     try {
-      const economyData = await this.saveLoadManager.loadEconomyFromPath('economy-editor/economy-default.json');
-      this.economyManager.loadFromData(economyData);
+      const graph = await this.economyIOService.loadDefault('economy-editor/economy-default.json');
+      this.economyEditorService.replaceGraph(graph);
+      this.economyManager = this.economyEditorService.getGraph();
       this.deselectNode();
       this.updateNodeList();
       console.log('Default economy loaded successfully');
@@ -425,9 +432,9 @@ export class EconomyEditorUI extends OrthographicViewerBase {
       
       try {
         if (isEdit) {
-          this.economyManager.updateNode(nodeId, name, imagePath, filteredInputs);
+          this.economyEditorService.updateProduct(nodeId, name, imagePath, filteredInputs);
         } else {
-          const newId = this.economyManager.addNode(name, imagePath, filteredInputs);
+          const newId = this.economyEditorService.addProduct(name, imagePath, filteredInputs);
           this.selectNode(newId);
         }
         
@@ -505,9 +512,9 @@ export class EconomyEditorUI extends OrthographicViewerBase {
     fuelBtn.addEventListener('click', async () => {
       try {
         if (isFuel) {
-          this.economyManager.setFuelProduct(null);
+          this.economyEditorService.setFuelProduct(null);
         } else {
-          this.economyManager.setFuelProduct(nodeId);
+          this.economyEditorService.setFuelProduct(nodeId);
         }
         this.updateNodeList();
         this.showPropertiesPanel(nodeId); // Refresh properties panel
@@ -524,7 +531,7 @@ export class EconomyEditorUI extends OrthographicViewerBase {
     deleteBtn.addEventListener('click', async () => {
       if (confirm(`Delete "${node.name}"?`)) {
         try {
-          this.economyManager.deleteNode(nodeId);
+          this.economyEditorService.deleteProduct(nodeId);
           this.deselectNode();
           await this.updateVisualization();
           this.updateNodeList();
@@ -559,9 +566,9 @@ export class EconomyEditorUI extends OrthographicViewerBase {
   // Save economy data
   saveEconomy() {
     try {
-      const economyDataJson = this.saveLoadManager.saveEconomyData(this.economyManager);
+      const economyDataJson = this.economyIOService.toJson(this.economyEditorService.getGraph());
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-      this.saveLoadManager.downloadEconomyData(economyDataJson, `economy-save-${timestamp}.json`);
+      this.filePersistence.downloadJson(economyDataJson, `economy-save-${timestamp}.json`);
       console.log('Economy saved successfully');
     } catch (error) {
       console.error('Failed to save economy:', error);
@@ -572,10 +579,10 @@ export class EconomyEditorUI extends OrthographicViewerBase {
   // Load economy data
   async loadEconomy(file) {
     try {
-      const fileContent = await this.saveLoadManager.readFile(file);
-      const economyData = await this.saveLoadManager.loadEconomyData(fileContent);
-      
-      this.economyManager.loadFromData(economyData);
+      const fileContent = await this.filePersistence.readFile(file);
+      const graph = this.economyIOService.fromJson(fileContent);
+      this.economyEditorService.replaceGraph(graph);
+      this.economyManager = this.economyEditorService.getGraph();
       this.deselectNode();
       await this.updateVisualization();
       this.updateNodeList();
@@ -697,17 +704,13 @@ export class EconomyEditorUI extends OrthographicViewerBase {
 
       try {
         // Generate random economy
-        const newManager = this.randomGenerator.generateRandomEconomy(
+        const graph = this.economyEditorService.generateRandomEconomy(
           numNodes,
           maxDepth,
           minInputs,
           maxInputs
         );
-
-        // Replace current economy
-        this.economyManager.clear();
-        const economyData = newManager.serialize();
-        this.economyManager.loadFromData(economyData);
+        this.economyManager = graph;
         
         this.deselectNode();
         await this.updateVisualization();

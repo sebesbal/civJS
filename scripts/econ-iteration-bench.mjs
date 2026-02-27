@@ -1,7 +1,7 @@
 import fs from 'node:fs';
-import { EconomyManager } from '../economy-editor/economy-manager.js';
+import { EconomyGraph as EconomyManager } from '../domain/economy/economy-graph.js';
 import { RandomFactoryGenerator } from '../simulation/random-factory-generator.js';
-import { SimulationEngine } from '../simulation/simulation-engine.js';
+import { SimulationEngine } from '../domain/simulation/simulation-engine.js';
 import { NoiseGenerator } from '../map-editor/noise.js';
 import { TileTypes } from '../map-editor/config/tile-types.js';
 

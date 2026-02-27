@@ -1,6 +1,6 @@
 // FactoryOverviewVisualizer - Three.js DAG visualization with live stats cards
 import * as THREE from 'three';
-import { DAGLayout } from '../economy-editor/dag-layout.js';
+import { DAGLayout } from '../ui/visualizers/dag-layout.js';
 
 export class FactoryOverviewVisualizer {
   constructor(scene, camera, renderer) {

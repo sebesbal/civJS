@@ -1,14 +1,17 @@
 // UI Manager - coordinates different editor UIs
 import { MapEditorUI } from './map-editor/map-editor-ui.js';
-import { EconomyEditorUI } from './economy-editor/economy-editor-ui.js';
+import { EconomyEditorUI } from './ui/editors/economy-editor-ui.js';
 import { FactoryOverviewUI } from './factory-overview/factory-overview-ui.js';
 import { generateObjectTypesFromEconomy } from './map-editor/config/object-types.js';
 import { ViewportControllerTest } from './test/viewport-controller-test.js';
 import { ObjectSceneTest } from './test/object-scene-test.js';
 import { SimulationTest } from './test/simulation-test.js';
+import { EconomyEditorService } from './application/economy/economy-editor-service.js';
+import { EconomyIOService } from './application/economy/economy-io-service.js';
+import { JsonFilePersistence } from './ui/persistence/json-file-persistence.js';
 
 export class UIManager {
-  constructor() {
+  constructor({ economyEditorService = null, economyIOService = null, filePersistence = null } = {}) {
     this.mainToolbar = null;
     this.mapEditorUI = null;
     this.economyEditorUI = null;
@@ -23,6 +26,9 @@ export class UIManager {
 
     // Callback for external code that needs to know when object types change
     this.onObjectTypesChange = null;
+    this.economyEditorService = economyEditorService || new EconomyEditorService();
+    this.economyIOService = economyIOService || new EconomyIOService();
+    this.filePersistence = filePersistence || new JsonFilePersistence();
 
     // Define forwarded callback properties dynamically
     this._setupCallbackForwarding([
@@ -33,8 +39,6 @@ export class UIManager {
       { name: 'onRouteDelete', target: 'mapEditorUI' },
       { name: 'onSaveGame', target: 'mapEditorUI' },
       { name: 'onLoadGame', target: 'mapEditorUI' },
-      { name: 'onSaveEconomy', target: 'economyEditorUI' },
-      { name: 'onLoadEconomy', target: 'economyEditorUI' },
       { name: 'onSimulationToggle', target: 'mapEditorUI' },
       { name: 'onSimulationSpeedChange', target: 'mapEditorUI' },
       { name: 'onGenerateRandomFactories', target: 'mapEditorUI' },
@@ -65,15 +69,21 @@ export class UIManager {
   init() {
     this.createMainToolbar();
     this.mapEditorUI = new MapEditorUI();
-    this.economyEditorUI = new EconomyEditorUI();
+    this.economyEditorUI = new EconomyEditorUI({
+      economyEditorService: this.economyEditorService,
+      economyIOService: this.economyIOService,
+      filePersistence: this.filePersistence
+    });
     this.factoryOverviewUI = new FactoryOverviewUI();
     this.createTestEditorUI();
 
     // Wire economy changes to update map editor factory list and factory overview
-    this.economyEditorUI.onEconomyChange = (economyManager) => {
-      this.updateMapObjectTypes(economyManager);
-      this.factoryOverviewUI.setEconomyManager(economyManager);
-    };
+    this.economyEditorService.subscribeEconomyChanged((economyGraph) => {
+      this.updateMapObjectTypes(economyGraph);
+      this.factoryOverviewUI.setEconomyManager(economyGraph);
+    });
+    this.updateMapObjectTypes(this.economyEditorService.getGraph());
+    this.factoryOverviewUI.setEconomyManager(this.economyEditorService.getGraph());
 
     // Set the saved mode (or default to MAP_EDITOR)
     this.setEditorMode(this.currentEditorMode);

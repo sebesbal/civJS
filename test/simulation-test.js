@@ -2,10 +2,10 @@
 import * as THREE from 'three';
 import { Tilemap } from '../map-editor/tilemap.js';
 import { ObjectManager } from '../map-editor/objects.js';
-import { EconomyManager } from '../economy-editor/economy-manager.js';
+import { EconomyGraph as EconomyManager } from '../domain/economy/economy-graph.js';
 import { generateObjectTypesFromEconomy } from '../map-editor/config/object-types.js';
 import { RandomFactoryGenerator } from '../simulation/random-factory-generator.js';
-import { SimulationEngine } from '../simulation/simulation-engine.js';
+import { SimulationEngine } from '../domain/simulation/simulation-engine.js';
 import { FactoryOverviewAggregator } from '../factory-overview/factory-overview-aggregator.js';
 
 export class SimulationTest {

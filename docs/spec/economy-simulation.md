@@ -168,10 +168,11 @@ Sidebar section with:
 
 ## Save/Load
 
-Save format version 3 adds:
+Save format version 4:
 - `simulation` field containing:
   - Actor states (storage levels, production progress, prices)
   - Contracts (source, destination, product, fixed shipment amount, fixed unit price, score)
   - Active traders (position, path, cargo)
   - Simulation metadata (tick count, speed, running state)
-- Backward compatible: v1/v2 saves load without contracts
+- `economy` field uses `economy.version = 2`
+- No backward compatibility with older game/economy versions in this refactor

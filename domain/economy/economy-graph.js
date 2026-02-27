@@ -1,29 +1,26 @@
-// Economy Manager - manages the DAG of product nodes
-import { ProductNode } from './product-node.js';
+// EconomyGraph - domain model for product dependency DAG
+import { Product } from './product.js';
 
-export class EconomyManager {
+export class EconomyGraph {
   constructor() {
-    this.nodes = new Map(); // Map<id, ProductNode>
+    this.nodes = new Map(); // Map<id, Product>
     this.nextNodeId = 0;
-    this.fuelProductId = null; // ID of the product designated as fuel
+    this.fuelProductId = null;
   }
 
-  // Add a new node to the DAG
-  addNode(name, imagePath = '', inputs = []) {
-    // Validate inputs reference existing nodes
+  addProduct(name, imagePath = '', inputs = []) {
     for (const input of inputs) {
       if (!this.nodes.has(input.productId)) {
         throw new Error(`Input product ID ${input.productId} does not exist`);
       }
     }
 
-    const node = new ProductNode(this.nextNodeId, name, imagePath, inputs);
+    const node = new Product(this.nextNodeId, name, imagePath, inputs);
     const validation = node.validate();
     if (!validation.valid) {
       throw new Error(validation.error);
     }
 
-    // Check for cycles before adding
     if (this.wouldCreateCycle(node)) {
       throw new Error('Adding this node would create a cycle in the DAG');
     }
@@ -34,14 +31,12 @@ export class EconomyManager {
     return addedId;
   }
 
-  // Update an existing node
-  updateNode(id, name, imagePath, inputs) {
+  updateProduct(id, name, imagePath, inputs) {
     const node = this.nodes.get(id);
     if (!node) {
       throw new Error(`Node with ID ${id} does not exist`);
     }
 
-    // Validate inputs reference existing nodes (excluding self)
     for (const input of inputs) {
       if (input.productId === id) {
         throw new Error('Node cannot depend on itself');
@@ -51,37 +46,32 @@ export class EconomyManager {
       }
     }
 
-    // Create temporary node to validate
-    const tempNode = new ProductNode(id, name, imagePath, inputs);
+    const tempNode = new Product(id, name, imagePath, inputs);
     const validation = tempNode.validate();
     if (!validation.valid) {
       throw new Error(validation.error);
     }
 
-    // Check for cycles before updating
     const oldInputs = node.inputs;
     node.inputs = inputs;
     if (this.wouldCreateCycle(node)) {
-      node.inputs = oldInputs; // Restore
+      node.inputs = oldInputs;
       throw new Error('Updating this node would create a cycle in the DAG');
     }
 
-    // Update node properties
     node.name = name;
     node.imagePath = imagePath;
     node.inputs = inputs;
   }
 
-  // Delete a node
-  deleteNode(id) {
+  deleteProduct(id) {
     if (!this.nodes.has(id)) {
       return false;
     }
 
-    // Check if any other node depends on this one
     for (const node of this.nodes.values()) {
       if (node.id !== id && node.inputs.some(input => input.productId === id)) {
-        throw new Error(`Cannot delete node: other nodes depend on it`);
+        throw new Error('Cannot delete node: other nodes depend on it');
       }
     }
 
@@ -89,29 +79,21 @@ export class EconomyManager {
     return true;
   }
 
-  // Get a node by ID
-  getNode(id) {
+  getProduct(id) {
     return this.nodes.get(id);
   }
 
-  // Get all nodes
-  getAllNodes() {
+  listProducts() {
     return Array.from(this.nodes.values());
   }
 
-  // Check if adding/updating a node would create a cycle
   wouldCreateCycle(node) {
-    // Use DFS to detect cycles
     const visited = new Set();
     const recStack = new Set();
 
     const hasCycle = (nodeId) => {
-      if (recStack.has(nodeId)) {
-        return true; // Cycle detected
-      }
-      if (visited.has(nodeId)) {
-        return false; // Already processed
-      }
+      if (recStack.has(nodeId)) return true;
+      if (visited.has(nodeId)) return false;
 
       visited.add(nodeId);
       recStack.add(nodeId);
@@ -129,12 +111,10 @@ export class EconomyManager {
       return false;
     };
 
-    // Check if the node itself creates a cycle
     if (hasCycle(node.id)) {
       return true;
     }
 
-    // Check if any node that depends on this node creates a cycle
     for (const otherNode of this.nodes.values()) {
       if (otherNode.inputs.some(input => input.productId === node.id)) {
         if (hasCycle(otherNode.id)) {
@@ -146,18 +126,15 @@ export class EconomyManager {
     return false;
   }
 
-  // Topological sort for layout calculation
   topologicalSort() {
     const inDegree = new Map();
     const adjacencyList = new Map();
 
-    // Initialize
     for (const node of this.nodes.values()) {
       inDegree.set(node.id, 0);
       adjacencyList.set(node.id, []);
     }
 
-    // Build graph and calculate in-degrees
     for (const node of this.nodes.values()) {
       for (const input of node.inputs) {
         const fromId = input.productId;
@@ -167,15 +144,11 @@ export class EconomyManager {
       }
     }
 
-    // Kahn's algorithm
     const queue = [];
     const result = [];
 
-    // Start with nodes that have no incoming edges (raw materials)
     for (const [id, degree] of inDegree.entries()) {
-      if (degree === 0) {
-        queue.push(id);
-      }
+      if (degree === 0) queue.push(id);
     }
 
     while (queue.length > 0) {
@@ -193,14 +166,11 @@ export class EconomyManager {
     return result;
   }
 
-  // Calculate depth of each node (distance from raw materials)
   calculateDepths() {
     const depths = new Map();
 
     const calculateDepth = (nodeId) => {
-      if (depths.has(nodeId)) {
-        return depths.get(nodeId);
-      }
+      if (depths.has(nodeId)) return depths.get(nodeId);
 
       const node = this.nodes.get(nodeId);
       if (!node || node.inputs.length === 0) {
@@ -226,7 +196,6 @@ export class EconomyManager {
     return depths;
   }
 
-  // Set the fuel product
   setFuelProduct(productId) {
     if (productId !== null && !this.nodes.has(productId)) {
       throw new Error(`Product ID ${productId} does not exist`);
@@ -234,45 +203,53 @@ export class EconomyManager {
     this.fuelProductId = productId;
   }
 
-  // Get the fuel product ID
   getFuelProductId() {
     return this.fuelProductId;
   }
 
-  // Check if a product is the fuel
   isFuel(productId) {
     return this.fuelProductId === productId;
   }
 
-  // Serialize entire economy to JSON-compatible object
   serialize() {
     const nodes = Array.from(this.nodes.values()).map(node => node.serialize());
     return {
-      version: 1,
-      nodes: nodes,
+      version: 2,
+      nodes,
       nextNodeId: this.nextNodeId,
       fuelProductId: this.fuelProductId
     };
   }
 
-  // Load economy from serialized data
-  loadFromData(data) {
+  load(data) {
+    if (!data || data.version !== 2) {
+      throw new Error('Unsupported economy version. Expected version 2.');
+    }
+    if (!Array.isArray(data.nodes)) {
+      throw new Error('Invalid economy file: missing nodes array');
+    }
+
     this.nodes.clear();
-    this.nextNodeId = data.nextNodeId || 0;
+    this.nextNodeId = data.nextNodeId ?? 0;
     this.fuelProductId = data.fuelProductId ?? null;
 
-    if (data.nodes && Array.isArray(data.nodes)) {
-      for (const nodeData of data.nodes) {
-        const node = ProductNode.deserialize(nodeData);
-        this.nodes.set(node.id, node);
-      }
+    for (const nodeData of data.nodes) {
+      const node = Product.deserialize(nodeData);
+      this.nodes.set(node.id, node);
     }
   }
 
-  // Clear all nodes
   clear() {
     this.nodes.clear();
     this.nextNodeId = 0;
+    this.fuelProductId = null;
   }
-}
 
+  // Compatibility aliases while migrating call sites.
+  addNode(name, imagePath = '', inputs = []) { return this.addProduct(name, imagePath, inputs); }
+  updateNode(id, name, imagePath, inputs) { return this.updateProduct(id, name, imagePath, inputs); }
+  deleteNode(id) { return this.deleteProduct(id); }
+  getNode(id) { return this.getProduct(id); }
+  getAllNodes() { return this.listProducts(); }
+  loadFromData(data) { return this.load(data); }
+}
