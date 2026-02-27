@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import { EconomyGraph as EconomyManager } from '../domain/economy/economy-graph.js';
-import { RandomFactoryGenerator } from '../simulation/random-factory-generator.js';
+import { RandomFactoryGenerator } from '../application/game/random-factory-generator.js';
 import { SimulationEngine } from '../domain/simulation/simulation-engine.js';
-import { NoiseGenerator } from '../map-editor/noise.js';
-import { TileTypes } from '../map-editor/config/tile-types.js';
+import { NoiseGenerator } from '../domain/map/noise.js';
+import { TileTypes } from '../domain/map/config/tile-types.js';
 
 class HeadlessTilemap {
   constructor(mapSize, tileSize, seed) {
@@ -81,7 +81,7 @@ function makeRng(seed) {
 }
 
 function loadEconomy() {
-  const raw = fs.readFileSync(new URL('../economy-editor/economy-default.json', import.meta.url), 'utf8');
+  const raw = fs.readFileSync(new URL('../assets/economy/economy-default.json', import.meta.url), 'utf8');
   const data = JSON.parse(raw);
   const em = new EconomyManager();
   em.loadFromData(data);

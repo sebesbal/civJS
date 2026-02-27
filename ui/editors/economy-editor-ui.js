@@ -70,7 +70,7 @@ export class EconomyEditorUI extends OrthographicViewerBase {
   // Load default economy file
   async loadDefaultEconomy() {
     try {
-      const graph = await this.economyIOService.loadDefault('economy-editor/economy-default.json');
+      const graph = await this.economyIOService.loadDefault('assets/economy/economy-default.json');
       this.economyEditorService.replaceGraph(graph);
       this.economyManager = this.economyEditorService.getGraph();
       this.deselectNode();

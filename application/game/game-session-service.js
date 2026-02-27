@@ -1,6 +1,6 @@
 // GameSessionService - orchestrates game domain/application objects used by the runtime.
 import { SimulationEngine } from '../../domain/simulation/simulation-engine.js';
-import { TradeRenderer } from '../../simulation/trade-renderer.js';
+import { TradeRenderer } from '../../ui/visualizers/trade-renderer.js';
 
 export class GameSessionService {
   constructor({ scene, routeManager, mapEditor, tilemap, economyEditorService }) {

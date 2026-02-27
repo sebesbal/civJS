@@ -17,25 +17,30 @@ A civilization-style browser game built with Three.js. Single-page app with mult
 
 ### Editor Modes (managed by `ui.js` → `UIManager`)
 - **Map Editor**: 3D tile map with placeable objects and routes
-  - `map-editor/map-editor.js` - MapEditor (raycasting, mouse handling)
-  - `map-editor/tilemap.js` - Tilemap (grid of tiles)
-  - `map-editor/objects.js` - ObjectManager (3D factory objects on map)
-  - `map-editor/routes.js` - RouteManager (waypoint paths between tiles)
-  - `map-editor/map-editor-ui.js` - MapEditorUI (sidebar, properties panel)
-  - `map-editor/config/object-types.js` - generates factory types from economy
-  - `map-editor/config/tile-types.js` - tile type definitions
-  - `map-editor/camera-controller.js` - orbit/zoom camera
-  - `map-editor/save-load.js` - game state serialization
+  - `application/game/map-editor.js` - MapEditor (raycasting, mouse handling)
+  - `domain/map/tilemap.js` - Tilemap (grid of tiles)
+  - `domain/map/objects.js` - ObjectManager (3D factory objects on map)
+  - `domain/map/routes.js` - RouteManager (waypoint paths between tiles)
+  - `ui/editors/map-editor-ui.js` - MapEditorUI (sidebar, properties panel)
+  - `application/game/object-types.js` - generates factory types from economy
+  - `domain/map/config/tile-types.js` - tile type definitions
+  - `ui/viewers/camera-controller.js` - orbit/zoom camera
+  - `application/game/state-service.js` - game state serialization
 
 - **Economy Editor**: DAG of product nodes with visualization
-  - `economy-editor/economy-manager.js` - EconomyManager (CRUD for product nodes)
-  - `economy-editor/product-node.js` - ProductNode data class
-  - `economy-editor/economy-editor-ui.js` - EconomyEditorUI (extends OrthographicViewerBase)
-  - `economy-editor/economy-visualizer.js` - 3D DAG visualization
-  - `economy-editor/dag-layout.js` - Sugiyama-style DAG layout algorithm
-  - `economy-editor/random-economy-generator.js` - random economy generation
-  - `economy-editor/economy-save-load.js` - economy file I/O
-  - `economy-editor/economy-default.json` - default 20-node animal-themed economy
+  - `domain/economy/economy-graph.js` - economy graph model
+  - `domain/economy/product.js` - Product data class
+  - `ui/editors/economy-editor-ui.js` - EconomyEditorUI (extends OrthographicViewerBase)
+  - `ui/visualizers/economy-visualizer.js` - 3D DAG visualization
+  - `ui/visualizers/dag-layout.js` - DAG layout algorithm
+  - `domain/economy/random-economy-generator.js` - random economy generation logic
+  - `application/economy/economy-io-service.js` - economy file I/O
+  - `assets/economy/economy-default.json` - default 20-node animal-themed economy
+
+- **Factory Overview**: read-only aggregated economy/simulation view
+  - `ui/viewers/factory-overview-ui.js`
+  - `ui/visualizers/factory-overview-visualizer.js`
+  - `application/game/factory-overview-aggregator.js`
 
 - **Test Editor**: Test harnesses for components
   - `test/viewport-controller-test.js`, `test/object-scene-test.js`, `test/canvas-test-base.js`

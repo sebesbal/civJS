@@ -1,7 +1,7 @@
 // TradeRenderer - renders active trade paths and transport spheres on the map
 
 import * as THREE from 'three';
-import { gridToWorld } from './pathfinding.js';
+import { gridToWorld } from '../../domain/simulation/pathfinding.js';
 
 export class TradeRenderer {
   /**

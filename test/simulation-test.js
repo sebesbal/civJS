@@ -1,12 +1,12 @@
 // Simulation Test - verifies that all products get produced after generating factories
 import * as THREE from 'three';
-import { Tilemap } from '../map-editor/tilemap.js';
-import { ObjectManager } from '../map-editor/objects.js';
+import { Tilemap } from '../domain/map/tilemap.js';
+import { ObjectManager } from '../domain/map/objects.js';
 import { EconomyGraph as EconomyManager } from '../domain/economy/economy-graph.js';
-import { generateObjectTypesFromEconomy } from '../map-editor/config/object-types.js';
-import { RandomFactoryGenerator } from '../simulation/random-factory-generator.js';
+import { generateObjectTypesFromEconomy } from '../application/game/object-types.js';
+import { RandomFactoryGenerator } from '../application/game/random-factory-generator.js';
 import { SimulationEngine } from '../domain/simulation/simulation-engine.js';
-import { FactoryOverviewAggregator } from '../factory-overview/factory-overview-aggregator.js';
+import { FactoryOverviewAggregator } from '../application/game/factory-overview-aggregator.js';
 
 export class SimulationTest {
   constructor(container, options = {}) {
@@ -164,7 +164,7 @@ export class SimulationTest {
   async loadDefaultEconomy() {
     this.economyManager = new EconomyManager();
     try {
-      const resp = await fetch('economy-editor/economy-default.json');
+      const resp = await fetch('assets/economy/economy-default.json');
       const data = await resp.json();
       this.economyManager.loadFromData(data);
       const nodes = this.economyManager.getAllNodes();

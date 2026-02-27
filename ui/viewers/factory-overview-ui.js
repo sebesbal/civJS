@@ -1,8 +1,8 @@
 // Factory Overview UI - read-only DAG view with aggregated simulation stats
 import * as THREE from 'three';
-import { OrthographicViewerBase } from '../utils/orthographic-viewer-base.js';
-import { FactoryOverviewVisualizer } from './factory-overview-visualizer.js';
-import { FactoryOverviewAggregator } from './factory-overview-aggregator.js';
+import { OrthographicViewerBase } from '../../utils/orthographic-viewer-base.js';
+import { FactoryOverviewVisualizer } from '../visualizers/factory-overview-visualizer.js';
+import { FactoryOverviewAggregator } from '../../application/game/factory-overview-aggregator.js';
 
 export class FactoryOverviewUI extends OrthographicViewerBase {
   constructor() {

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { ObjectManager } from './objects.js';
+import { ObjectManager } from '../../domain/map/objects.js';
 
 export class MapEditor {
   constructor(scene, camera, renderer, tiles, mapConfig = null, routeManager) {

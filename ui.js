@@ -1,8 +1,8 @@
 // UI Manager - coordinates different editor UIs
-import { MapEditorUI } from './map-editor/map-editor-ui.js';
+import { MapEditorUI } from './ui/editors/map-editor-ui.js';
 import { EconomyEditorUI } from './ui/editors/economy-editor-ui.js';
-import { FactoryOverviewUI } from './factory-overview/factory-overview-ui.js';
-import { generateObjectTypesFromEconomy } from './map-editor/config/object-types.js';
+import { FactoryOverviewUI } from './ui/viewers/factory-overview-ui.js';
+import { generateObjectTypesFromEconomy } from './application/game/object-types.js';
 import { ViewportControllerTest } from './test/viewport-controller-test.js';
 import { ObjectSceneTest } from './test/object-scene-test.js';
 import { SimulationTest } from './test/simulation-test.js';

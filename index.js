@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { Tilemap } from './map-editor/tilemap.js';
-import { MapEditor } from './map-editor/map-editor.js';
+import { Tilemap } from './domain/map/tilemap.js';
+import { MapEditor } from './application/game/map-editor.js';
 import { UIManager } from './ui.js';
-import { RouteManager } from './map-editor/routes.js';
-import { CameraController } from './map-editor/camera-controller.js';
-import { generateObjectTypesFromEconomy } from './map-editor/config/object-types.js';
-import { RandomFactoryGenerator } from './simulation/random-factory-generator.js';
+import { RouteManager } from './domain/map/routes.js';
+import { CameraController } from './ui/viewers/camera-controller.js';
+import { generateObjectTypesFromEconomy } from './application/game/object-types.js';
+import { RandomFactoryGenerator } from './application/game/random-factory-generator.js';
 import { EconomyEditorService } from './application/economy/economy-editor-service.js';
 import { EconomyIOService } from './application/economy/economy-io-service.js';
 import { GameStateService } from './application/game/state-service.js';
