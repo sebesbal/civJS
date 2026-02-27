@@ -182,6 +182,7 @@ export class SimulationEngine {
       const isRawMaterial = state.isRawMaterial();
       const isSink = state.isSink(this.economyManager);
       const outputStorage = state.outputStorage.get(state.productId);
+      let countsAsUptimeTick = false;
 
       // Check if output storage is at capacity (unless sink — output disappears)
       if (!isSink && outputStorage && outputStorage.current >= outputStorage.capacity) {
@@ -197,6 +198,7 @@ export class SimulationEngine {
         // Raw materials always produce
         state.isProducing = true;
         state.status = 'producing';
+        countsAsUptimeTick = true;
         state.productionProgress += state.productionRate;
 
         if (state.productionProgress >= 1.0) {
@@ -214,21 +216,22 @@ export class SimulationEngine {
           }
         }
       } else {
-        // Check if all inputs are available
-        let canProduce = true;
+        // Processors only stop on full output; low inputs no longer halt production.
+        // Inputs are consumed when fully available for the recipe on this tick.
+        let canConsumeInputs = true;
         for (const input of node.inputs) {
           const inputStorage = state.inputStorage.get(input.productId);
           if (!inputStorage || inputStorage.current < input.amount) {
-            canProduce = false;
+            canConsumeInputs = false;
             break;
           }
         }
 
-        if (canProduce) {
-          state.isProducing = true;
-          state.status = 'producing';
+        state.isProducing = true;
+        state.status = 'producing';
+        countsAsUptimeTick = canConsumeInputs;
 
-          // Consume inputs
+        if (canConsumeInputs) {
           for (const input of node.inputs) {
             const inputStorage = state.inputStorage.get(input.productId);
             inputStorage.current -= input.amount;
@@ -237,31 +240,28 @@ export class SimulationEngine {
               state.shiftIdealRange(inputStorage, 'up');
             }
           }
+        }
 
-          state.productionProgress += state.productionRate;
+        state.productionProgress += state.productionRate;
 
-          if (state.productionProgress >= 1.0) {
-            state.productionProgress -= 1.0;
-            state.totalProduced++;
-            if (!isSink && outputStorage) {
-              outputStorage.current = Math.min(
-                outputStorage.current + 1,
-                outputStorage.capacity
-              );
-              // If we hit capacity, shift ideal range down
-              if (outputStorage.current >= outputStorage.capacity && outputStorage.idealMin !== undefined) {
-                state.shiftIdealRange(outputStorage, 'down');
-              }
+        if (state.productionProgress >= 1.0) {
+          state.productionProgress -= 1.0;
+          state.totalProduced++;
+          if (!isSink && outputStorage) {
+            outputStorage.current = Math.min(
+              outputStorage.current + 1,
+              outputStorage.capacity
+            );
+            // If we hit capacity, shift ideal range down
+            if (outputStorage.current >= outputStorage.capacity && outputStorage.idealMin !== undefined) {
+              state.shiftIdealRange(outputStorage, 'down');
             }
           }
-        } else {
-          state.isProducing = false;
-          state.status = 'missing_inputs';
         }
       }
 
       state.observedTicks += 1;
-      if (state.status === 'producing') {
+      if (countsAsUptimeTick) {
         state.producingTicks += 1;
       }
     }
@@ -411,7 +411,7 @@ export class SimulationEngine {
   _discoverRecoveryContracts() {
     for (const buyerState of this.actorStates.values()) {
       if (buyerState.type !== 'PRODUCER') continue;
-      if (buyerState.status !== 'missing_inputs') continue;
+      if (!this._producerHasMissingInputs(buyerState)) continue;
       if (!buyerState.recipe || buyerState.recipe.length === 0) continue;
 
       for (const inp of buyerState.recipe) {
@@ -575,7 +575,7 @@ export class SimulationEngine {
     if (!recipeItem) return priority;
 
     const deficit = Math.max(0, recipeItem.amount - storage.current);
-    if (destState.status === 'missing_inputs' && deficit > 0) {
+    if (this._producerHasMissingInputs(destState) && deficit > 0) {
       priority += 1000 + (deficit * 100);
     }
 
@@ -761,7 +761,7 @@ export class SimulationEngine {
     }
 
     let urgency = 1;
-    if (candidateState.status === 'missing_inputs') {
+    if (this._producerHasMissingInputs(candidateState)) {
       urgency *= 1.5;
     }
 
@@ -834,6 +834,23 @@ export class SimulationEngine {
     }
 
     return Math.max(1, Math.ceil(cost * (1 + sourceState.profitMargin)));
+  }
+
+  /**
+   * True when a producer currently lacks at least one recipe input for one production step.
+   */
+  _producerHasMissingInputs(state) {
+    if (!state || state.type !== 'PRODUCER') return false;
+    if (!state.recipe || state.recipe.length === 0) return false;
+
+    for (const input of state.recipe) {
+      const inputStorage = state.inputStorage.get(input.productId);
+      if (!inputStorage || inputStorage.current < input.amount) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
