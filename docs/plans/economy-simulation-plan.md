@@ -26,7 +26,7 @@ See [specification](../spec/economy-simulation.md) for full details.
 - New: `simulation/actor-state.js` (storage slots, pricing, serialization)
 
 ### 2b. A* Pathfinding
-- New: `simulation/pathfinding.js` (A* on tilemap grid, road cost reduction)
+- New: `map/pathfinding.js` (A* on tilemap grid, road cost reduction)
 
 ### 2c. Simulation engine
 - New: `simulation/simulation-engine.js` (tick loop: production → trading → transport → pricing)
@@ -54,7 +54,7 @@ See [specification](../spec/economy-simulation.md) for full details.
 |------|---------|
 | `simulation/simulation-engine.js` | Core tick loop |
 | `simulation/actor-state.js` | Storage/pricing data |
-| `simulation/pathfinding.js` | A* pathfinding |
+| `map/pathfinding.js` | A* pathfinding |
 | `simulation/trade-renderer.js` | Trade visualization |
 | `simulation/random-factory-generator.js` | Random factory placement |
 

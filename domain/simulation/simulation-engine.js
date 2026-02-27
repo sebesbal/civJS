@@ -1,7 +1,7 @@
 // SimulationEngine - core tick loop for production, trading, transport, and pricing
 
 import { ActorState } from './actor-state.js';
-import { findPath, computeRoadTiles, worldToGrid, gridToWorld } from './pathfinding.js';
+import { findPath, computeRoadTiles, worldToGrid, gridToWorld } from '../map/pathfinding.js';
 
 export class SimulationEngine {
   /**
