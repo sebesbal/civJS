@@ -3,8 +3,7 @@ import { MapEditorUI } from './ui/editors/map-editor-ui.js';
 import { EconomyEditorUI } from './ui/editors/economy-editor-ui.js';
 import { FactoryOverviewUI } from './ui/viewers/factory-overview-ui.js';
 import { generateObjectTypesFromEconomy } from './application/game/object-types.js';
-import { ViewportControllerTest } from './test/viewport-controller-test.js';
-import { ObjectSceneTest } from './test/object-scene-test.js';
+import { MapTest } from './test/map-test.js';
 import { SimulationTest } from './test/simulation-test.js';
 import { EconomyEditorService } from './application/economy/economy-editor-service.js';
 import { EconomyIOService } from './application/economy/economy-io-service.js';
@@ -110,6 +109,13 @@ export class UIManager {
     return btn;
   }
 
+  _normalizeTestTab(tabName) {
+    if (tabName === 'simulation' || tabName === 'test3') {
+      return 'simulation';
+    }
+    return 'map';
+  }
+
   createTestEditorUI() {
     // Create test toolbar (menubar)
     this.testToolbar = document.createElement('div');
@@ -117,8 +123,8 @@ export class UIManager {
     this.testToolbar.style.position = 'fixed';
     this.testToolbar.style.left = '60px';
     this.testToolbar.style.top = '0';
-    this.testToolbar.style.width = 'auto';
-    this.testToolbar.style.minWidth = '60px';
+    this.testToolbar.style.width = '140px';
+    this.testToolbar.style.minWidth = '140px';
     this.testToolbar.style.height = '100vh';
     this.testToolbar.style.background = 'rgba(20, 20, 20, 0.95)';
     this.testToolbar.style.backdropFilter = 'blur(10px)';
@@ -134,9 +140,8 @@ export class UIManager {
 
     // Create test tab buttons
     const testTabs = [
-      { key: 'test1', label: 'ViewportController' },
-      { key: 'test2', label: 'ObjectScene' },
-      { key: 'test3', label: 'Simulation' },
+      { key: 'map', label: 'Map' },
+      { key: 'simulation', label: 'Simulation' },
     ];
 
     this.testButtons = {};
@@ -171,7 +176,7 @@ export class UIManager {
       container.id = `${tab.key}-container`;
       container.style.height = '100%';
       container.style.minHeight = '0';
-      if (tab.key !== 'test1') {
+      if (tab.key !== 'map') {
         container.style.display = 'none';
       }
       this.testEditorUI.appendChild(container);
@@ -179,16 +184,16 @@ export class UIManager {
     }
 
     // Initialize tests
-    this.viewportControllerTest = null;
-    this.objectSceneTest = null;
+    this.mapTest = null;
     this.simulationTest = null;
-    // Load saved test tab from localStorage, default to 'test1'
-    const savedTestTab = localStorage.getItem('lastTestTab') || 'test1';
+    // Load saved test tab from localStorage, default to 'map'
+    const savedTestTab = this._normalizeTestTab(localStorage.getItem('lastTestTab'));
     this.currentTestTab = savedTestTab;
     this.setTestTab(savedTestTab);
   }
 
   setTestTab(tabName) {
+    tabName = this._normalizeTestTab(tabName);
     this.currentTestTab = tabName;
     localStorage.setItem('lastTestTab', tabName);
 
@@ -203,14 +208,11 @@ export class UIManager {
     }
 
     // Initialize tests if needed
-    if (tabName === 'test1' && !this.viewportControllerTest) {
-      this.viewportControllerTest = new ViewportControllerTest(this.testTabContainers.test1);
+    if (tabName === 'map' && !this.mapTest) {
+      this.mapTest = new MapTest(this.testTabContainers.map);
     }
-    if (tabName === 'test2' && !this.objectSceneTest) {
-      this.objectSceneTest = new ObjectSceneTest(this.testTabContainers.test2);
-    }
-    if (tabName === 'test3' && !this.simulationTest) {
-      this.simulationTest = new SimulationTest(this.testTabContainers.test3, {
+    if (tabName === 'simulation' && !this.simulationTest) {
+      this.simulationTest = new SimulationTest(this.testTabContainers.simulation, {
         factoryOverviewUI: this.factoryOverviewUI
       });
     }
@@ -269,7 +271,7 @@ export class UIManager {
 
     // Restore the saved test tab when switching to TEST_EDITOR
     if (isTest && this.testTabContainers) {
-      const savedTestTab = localStorage.getItem('lastTestTab') || 'test1';
+      const savedTestTab = this._normalizeTestTab(localStorage.getItem('lastTestTab'));
       this.setTestTab(savedTestTab);
     }
 
