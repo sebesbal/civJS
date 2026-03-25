@@ -28,7 +28,7 @@ Agent-oriented map of the repository for fast code discovery. Prefer this file o
   - `domain/economy/economy-graph.js`: product graph model.
   - `domain/economy/random-economy-generator.js`: random graph generation.
 - `ui/`: DOM UIs and visualizers.
-  - `ui/editors/map-editor-ui.js`: map-mode sidebar, product selection, overlays, inspector panel.
+  - `ui/editors/map-editor-ui.js`: map-mode sidebar, product selection, floating overlay chooser, inspector panel.
   - `ui/editors/economy-editor-ui.js`: economy editor shell and product list/properties UI.
   - `ui/viewers/factory-overview-ui.js`: aggregated factory/simulation overview.
   - `ui/viewers/camera-controller.js`: map camera interactions.

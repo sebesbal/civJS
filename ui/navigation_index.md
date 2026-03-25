@@ -1,7 +1,7 @@
 # Navigation Index
 
 ## `ui/editors/`
-- `map-editor-ui.js`: map-mode sidebars, product list, simulation controls, overlays, object inspector.
+- `map-editor-ui.js`: map-mode sidebars, product list, simulation controls, floating bottom-left overlay control, object inspector.
 - `economy-editor-ui.js`: economy editor shell, product list, property editing, load/save/default economy bootstrap.
 
 ## `ui/viewers/`

@@ -24,8 +24,32 @@ export class MapEditorUI {
     this.onGenerateRandomFactories = null;
     this.onOverlaySettingsChange = null;
     this.simTickLabel = null;
-    this.overlayEnabledCheckbox = null;
-    this.overlayMetricSelect = null;
+    this.overlayControl = null;
+    this.overlayMetricButtons = [];
+
+    this.overlayMetricOptions = [
+      {
+        value: 'buy',
+        label: 'Buy Price',
+        previewClass: 'overlay-preview-buy'
+      },
+      {
+        value: 'productionCost',
+        label: 'Production Cost',
+        previewClass: 'overlay-preview-production-cost'
+      },
+      {
+        value: 'sell',
+        label: 'Sell Price',
+        previewClass: 'overlay-preview-sell'
+      },
+      {
+        value: 'profit',
+        label: 'Profit',
+        previewClass: 'overlay-preview-profit'
+      }
+    ];
+    this.selectedOverlayMetric = 'buy';
 
     this.init();
   }
@@ -264,40 +288,7 @@ export class MapEditorUI {
 
     this.sidebar.appendChild(simulationSection);
 
-    const overlaySection = document.createElement('div');
-    overlaySection.className = 'sidebar-section';
-
-    const overlayTitle = document.createElement('h3');
-    overlayTitle.textContent = 'Map Overlay';
-    overlaySection.appendChild(overlayTitle);
-
-    const overlayToggleRow = document.createElement('label');
-    overlayToggleRow.className = 'overlay-toggle-row';
-    overlayToggleRow.textContent = 'Enable';
-    this.overlayEnabledCheckbox = document.createElement('input');
-    this.overlayEnabledCheckbox.type = 'checkbox';
-    this.overlayEnabledCheckbox.style.marginLeft = '8px';
-    this.overlayEnabledCheckbox.addEventListener('change', () => this._emitOverlaySettingsChange());
-    overlayToggleRow.appendChild(this.overlayEnabledCheckbox);
-    overlaySection.appendChild(overlayToggleRow);
-
-    this.overlayMetricSelect = document.createElement('select');
-    this.overlayMetricSelect.className = 'overlay-select';
-    for (const option of [
-      { value: 'buy', label: 'Buy Price' },
-      { value: 'productionCost', label: 'Production Cost' },
-      { value: 'sell', label: 'Sell Price' },
-      { value: 'profit', label: 'Profit' }
-    ]) {
-      const element = document.createElement('option');
-      element.value = option.value;
-      element.textContent = option.label;
-      this.overlayMetricSelect.appendChild(element);
-    }
-    this.overlayMetricSelect.addEventListener('change', () => this._emitOverlaySettingsChange());
-    overlaySection.appendChild(this.overlayMetricSelect);
-
-    this.sidebar.appendChild(overlaySection);
+    this._createOverlayControl();
 
     // Save/Load section
     const saveLoadSection = document.createElement('div');
@@ -349,6 +340,97 @@ export class MapEditorUI {
     this.propertiesPanel.id = 'properties-panel';
     this.propertiesPanel.classList.add('hidden');
     document.body.appendChild(this.propertiesPanel);
+  }
+
+  _createOverlayControl() {
+    this.overlayControl = document.createElement('div');
+    this.overlayControl.id = 'map-overlay-control';
+    this.overlayControl.setAttribute('aria-label', 'Map overlays');
+
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'overlay-trigger-card';
+    trigger.setAttribute('aria-haspopup', 'listbox');
+    trigger.setAttribute('aria-label', 'Choose map overlay');
+
+    const triggerPreview = document.createElement('span');
+    triggerPreview.className = 'overlay-trigger-preview';
+    const activePreview = document.createElement('span');
+    activePreview.className = 'overlay-option-preview overlay-trigger-active-preview';
+    triggerPreview.appendChild(activePreview);
+
+    const triggerBadge = document.createElement('span');
+    triggerBadge.className = 'overlay-trigger-badge';
+    triggerBadge.textContent = 'Layers';
+    triggerPreview.appendChild(triggerBadge);
+    trigger.appendChild(triggerPreview);
+
+    const triggerLabel = document.createElement('span');
+    triggerLabel.className = 'overlay-trigger-label';
+    triggerLabel.textContent = 'Layers';
+    trigger.appendChild(triggerLabel);
+
+    this.overlayControl.appendChild(trigger);
+
+    const optionsPanel = document.createElement('div');
+    optionsPanel.className = 'overlay-options-panel';
+    optionsPanel.setAttribute('role', 'listbox');
+    optionsPanel.setAttribute('aria-label', 'Overlay metric');
+
+    const offButton = document.createElement('button');
+    offButton.type = 'button';
+    offButton.className = 'overlay-option-card overlay-option-off';
+    offButton.dataset.metric = '';
+    offButton.dataset.enabled = 'false';
+    offButton.setAttribute('role', 'option');
+
+    const offPreview = document.createElement('span');
+    offPreview.className = 'overlay-option-preview overlay-preview-off';
+    offButton.appendChild(offPreview);
+
+    const offLabel = document.createElement('span');
+    offLabel.className = 'overlay-option-label';
+    offLabel.textContent = 'Off';
+    offButton.appendChild(offLabel);
+
+    offButton.addEventListener('click', () => {
+      this._setOverlayEnabled(false);
+      this._emitOverlaySettingsChange();
+    });
+    optionsPanel.appendChild(offButton);
+
+    this.overlayMetricButtons = this.overlayMetricOptions.map(option => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'overlay-option-card';
+      button.dataset.metric = option.value;
+      button.dataset.enabled = 'true';
+      button.setAttribute('role', 'option');
+      button.setAttribute('aria-selected', 'false');
+
+      const preview = document.createElement('span');
+      preview.className = `overlay-option-preview ${option.previewClass}`;
+      button.appendChild(preview);
+
+      const label = document.createElement('span');
+      label.className = 'overlay-option-label';
+      label.textContent = option.label;
+      button.appendChild(label);
+
+      button.addEventListener('click', () => {
+        this.selectedOverlayMetric = option.value;
+        this._setOverlayEnabled(true);
+        this._emitOverlaySettingsChange();
+      });
+
+      optionsPanel.appendChild(button);
+      return button;
+    });
+
+    this.overlayMetricButtons.unshift(offButton);
+    this.overlayControl.appendChild(optionsPanel);
+    document.body.appendChild(this.overlayControl);
+    this._syncOverlayMetricSelection();
   }
 
   setMode(mode) {
@@ -420,13 +502,53 @@ export class MapEditorUI {
   }
 
   _emitOverlaySettingsChange() {
+    this._syncOverlayMetricSelection();
+
     if (this.onOverlaySettingsChange) {
       this.onOverlaySettingsChange({
-        enabled: !!this.overlayEnabledCheckbox?.checked,
+        enabled: !!this.overlayControl?.dataset.enabled,
         productId: this._getSelectedProductId(),
-        metric: this.overlayMetricSelect?.value ?? 'buy'
+        metric: this.selectedOverlayMetric
       });
     }
+  }
+
+  _syncOverlayMetricSelection() {
+    for (const button of this.overlayMetricButtons) {
+      const isOffButton = button.dataset.enabled === 'false';
+      const isActive = isOffButton
+        ? !this._isOverlayEnabled()
+        : this._isOverlayEnabled() && button.dataset.metric === this.selectedOverlayMetric;
+      button.classList.toggle('active', isActive);
+      button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    }
+
+    if (this.overlayControl) {
+      const activeOption = this.overlayMetricOptions.find(option => option.value === this.selectedOverlayMetric);
+      const previewClass = this._isOverlayEnabled() && activeOption
+        ? activeOption.previewClass
+        : 'overlay-preview-off';
+      const triggerPreview = this.overlayControl.querySelector('.overlay-trigger-active-preview');
+      const triggerLabel = this.overlayControl.querySelector('.overlay-trigger-label');
+      if (triggerPreview) {
+        triggerPreview.className = `overlay-option-preview overlay-trigger-active-preview ${previewClass}`;
+      }
+      if (triggerLabel) {
+        triggerLabel.textContent = this._isOverlayEnabled() && activeOption
+          ? activeOption.label
+          : 'Layers';
+      }
+    }
+  }
+
+  _setOverlayEnabled(enabled) {
+    if (this.overlayControl) {
+      this.overlayControl.dataset.enabled = enabled ? 'true' : '';
+    }
+  }
+
+  _isOverlayEnabled() {
+    return this.overlayControl?.dataset.enabled === 'true';
   }
 
   showPropertiesPanel(objectData) {
@@ -865,11 +987,13 @@ export class MapEditorUI {
   show() {
     this.sidebar.classList.remove('hidden');
     this.productSidebar?.classList.remove('hidden');
+    this.overlayControl?.classList.remove('hidden');
   }
 
   hide() {
     this.sidebar.classList.add('hidden');
     this.productSidebar?.classList.add('hidden');
     this.propertiesPanel.classList.add('hidden');
+    this.overlayControl?.classList.add('hidden');
   }
 }
