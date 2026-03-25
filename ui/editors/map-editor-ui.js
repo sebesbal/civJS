@@ -21,7 +21,11 @@ export class MapEditorUI {
     this.onSimulationToggle = null;
     this.onSimulationSpeedChange = null;
     this.onGenerateRandomFactories = null;
+    this.onOverlaySettingsChange = null;
     this.simTickLabel = null;
+    this.overlayEnabledCheckbox = null;
+    this.overlayProductSelect = null;
+    this.overlayMetricSelect = null;
 
     this.init();
   }
@@ -42,6 +46,7 @@ export class MapEditorUI {
       }
     }
     this.rebuildObjectButtons();
+    this._rebuildOverlayProductOptions();
   }
 
   rebuildObjectButtons() {
@@ -255,6 +260,46 @@ export class MapEditorUI {
 
     this.sidebar.appendChild(simulationSection);
 
+    const overlaySection = document.createElement('div');
+    overlaySection.className = 'sidebar-section';
+
+    const overlayTitle = document.createElement('h3');
+    overlayTitle.textContent = 'Map Overlay';
+    overlaySection.appendChild(overlayTitle);
+
+    const overlayToggleRow = document.createElement('label');
+    overlayToggleRow.className = 'speed-label';
+    overlayToggleRow.textContent = 'Enable';
+    this.overlayEnabledCheckbox = document.createElement('input');
+    this.overlayEnabledCheckbox.type = 'checkbox';
+    this.overlayEnabledCheckbox.style.marginLeft = '8px';
+    this.overlayEnabledCheckbox.addEventListener('change', () => this._emitOverlaySettingsChange());
+    overlayToggleRow.appendChild(this.overlayEnabledCheckbox);
+    overlaySection.appendChild(overlayToggleRow);
+
+    this.overlayProductSelect = document.createElement('select');
+    this.overlayProductSelect.className = 'speed-slider';
+    this.overlayProductSelect.addEventListener('change', () => this._emitOverlaySettingsChange());
+    overlaySection.appendChild(this.overlayProductSelect);
+
+    this.overlayMetricSelect = document.createElement('select');
+    this.overlayMetricSelect.className = 'speed-slider';
+    for (const option of [
+      { value: 'buy', label: 'Buy Price' },
+      { value: 'productionCost', label: 'Production Cost' },
+      { value: 'sell', label: 'Sell Price' },
+      { value: 'profit', label: 'Profit' }
+    ]) {
+      const element = document.createElement('option');
+      element.value = option.value;
+      element.textContent = option.label;
+      this.overlayMetricSelect.appendChild(element);
+    }
+    this.overlayMetricSelect.addEventListener('change', () => this._emitOverlaySettingsChange());
+    overlaySection.appendChild(this.overlayMetricSelect);
+
+    this.sidebar.appendChild(overlaySection);
+
     // Save/Load section
     const saveLoadSection = document.createElement('div');
     saveLoadSection.className = 'sidebar-section';
@@ -360,6 +405,47 @@ export class MapEditorUI {
 
     routeBtn.classList.toggle('active', enabled);
     routeBtn.textContent = enabled ? 'Cancel Road' : 'Create Road';
+  }
+
+  _rebuildOverlayProductOptions() {
+    if (!this.overlayProductSelect) return;
+
+    const previousValue = this.overlayProductSelect.value;
+    this.overlayProductSelect.innerHTML = '';
+
+    const productTypes = Object.values(this.objectTypes)
+      .filter(def => !def.isWarehouse && def.productId !== null && def.productId !== undefined)
+      .sort((a, b) => a.productId - b.productId);
+
+    for (const def of productTypes) {
+      const option = document.createElement('option');
+      option.value = String(def.productId);
+      option.textContent = def.name.replace(/ Factory$/, '');
+      this.overlayProductSelect.appendChild(option);
+    }
+
+    if (productTypes.length === 0) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'No products';
+      this.overlayProductSelect.appendChild(option);
+      this.overlayProductSelect.disabled = true;
+      return;
+    }
+
+    this.overlayProductSelect.disabled = false;
+    const hasPrevious = productTypes.some(def => String(def.productId) === previousValue);
+    this.overlayProductSelect.value = hasPrevious ? previousValue : String(productTypes[0].productId);
+  }
+
+  _emitOverlaySettingsChange() {
+    if (this.onOverlaySettingsChange) {
+      this.onOverlaySettingsChange({
+        enabled: !!this.overlayEnabledCheckbox?.checked,
+        productId: this.overlayProductSelect?.value ?? '',
+        metric: this.overlayMetricSelect?.value ?? 'buy'
+      });
+    }
   }
 
   showPropertiesPanel(objectData) {

@@ -1090,17 +1090,72 @@ export class SimulationEngine {
     return this.activeTraders;
   }
 
+  getContracts() {
+    return this.contracts;
+  }
+
+  getConnectedContracts(objectId) {
+    return this.contracts.filter(contract =>
+      contract.sourceObjectId === objectId || contract.destObjectId === objectId
+    );
+  }
+
+  getActiveTradersForObject(objectId) {
+    const connectedContractIds = new Set(
+      this.getConnectedContracts(objectId).map(contract => contract.id)
+    );
+
+    return this.activeTraders.filter(trader =>
+      trader.sourceObjectId === objectId ||
+      trader.destObjectId === objectId ||
+      (trader.contractId !== null && connectedContractIds.has(trader.contractId))
+    );
+  }
+
+  getContractPath(contract) {
+    if (!contract) return null;
+    return this._getPathBetweenObjects(contract.sourceObjectId, contract.destObjectId);
+  }
+
+  getContractById(contractId) {
+    return this.contracts.find(contract => contract.id === contractId) ?? null;
+  }
+
   /**
    * Get the world position for a trader (interpolated along its path).
    */
   getTraderWorldPosition(trader) {
-    const current = trader.path[trader.pathIndex];
-    const next = trader.path[Math.min(trader.pathIndex + 1, trader.path.length - 1)];
+    return this.getTraderWorldPositionAtProgress(trader, this.getTickProgress());
+  }
+
+  getTickProgress(now = performance.now()) {
+    if (!this._running) return 0;
+    const adjustedInterval = this.tickInterval / this.speed;
+    if (adjustedInterval <= 0) return 0;
+    const elapsed = now - this._lastTickTime;
+    return Math.max(0, Math.min(0.999, elapsed / adjustedInterval));
+  }
+
+  getTraderWorldPositionAtProgress(trader, partialTickProgress = 0) {
+    if (!trader?.path || trader.path.length === 0) {
+      return { x: 0, z: 0 };
+    }
+
+    let pathIndex = trader.pathIndex;
+    let segmentProgress = trader.progress + (Math.max(0, partialTickProgress) * trader.speed);
+
+    while (segmentProgress >= 1.0 && pathIndex < trader.path.length - 1) {
+      segmentProgress -= 1.0;
+      pathIndex++;
+    }
+
+    const current = trader.path[Math.min(pathIndex, trader.path.length - 1)];
+    const next = trader.path[Math.min(pathIndex + 1, trader.path.length - 1)];
 
     const currentWorld = gridToWorld(current.gridX, current.gridZ, this.tilemap);
     const nextWorld = gridToWorld(next.gridX, next.gridZ, this.tilemap);
 
-    const t = Math.min(trader.progress, 1.0);
+    const t = Math.min(segmentProgress, 1.0);
     return {
       x: currentWorld.x + (nextWorld.x - currentWorld.x) * t,
       z: currentWorld.z + (nextWorld.z - currentWorld.z) * t

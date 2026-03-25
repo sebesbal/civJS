@@ -14,11 +14,13 @@ export class TradeRenderer {
     this.simulationEngine = simulationEngine;
     this.tilemap = tilemap;
 
-    // Rendered objects: Map<traderId, { pathLine, sphere }>
+    this.routeVisuals = new Map();
     this.traderVisuals = new Map();
+    this.selectedObjectId = null;
 
     // Shared geometry for transport spheres
-    this.sphereGeometry = new THREE.SphereGeometry(0.12, 8, 8);
+    this.sphereGeometry = new THREE.SphereGeometry(0.14, 10, 10);
+    this.flowPulseGeometry = new THREE.SphereGeometry(0.05, 8, 8);
   }
 
   /**
@@ -27,6 +29,34 @@ export class TradeRenderer {
   update() {
     const activeTraders = this.simulationEngine.getActiveTraders();
     const activeIds = new Set(activeTraders.map(t => t.id));
+    const activeContractIds = new Set(
+      activeTraders
+        .map(trader => trader.contractId)
+        .filter(contractId => contractId !== null && contractId !== undefined)
+    );
+
+    const selectedContracts = this.selectedObjectId === null
+      ? []
+      : this.simulationEngine.getConnectedContracts(this.selectedObjectId);
+
+    const routeStates = new Map();
+    for (const contract of selectedContracts) {
+      routeStates.set(this._getContractVisualKey(contract), {
+        contract,
+        active: activeContractIds.has(contract.id),
+        selected: true
+      });
+    }
+    for (const contract of this.simulationEngine.getContracts()) {
+      if (!activeContractIds.has(contract.id)) continue;
+      const key = this._getContractVisualKey(contract);
+      const prev = routeStates.get(key);
+      routeStates.set(key, {
+        contract,
+        active: true,
+        selected: prev?.selected ?? false
+      });
+    }
 
     // Remove visuals for completed traders
     for (const [id, visuals] of this.traderVisuals) {
@@ -41,72 +71,189 @@ export class TradeRenderer {
       let visuals = this.traderVisuals.get(trader.id);
 
       if (!visuals) {
-        visuals = this._createVisuals(trader);
+        visuals = this._createTraderVisuals(trader);
         this.traderVisuals.set(trader.id, visuals);
       }
 
       // Update sphere position
-      this._updateSpherePosition(trader, visuals.sphere);
+      this._updateTraderSpherePosition(trader, visuals.sphere);
+      this._styleTraderVisual(trader, visuals);
+    }
+
+    const requiredRouteKeys = new Set(routeStates.keys());
+    for (const [key, visuals] of this.routeVisuals) {
+      if (!requiredRouteKeys.has(key)) {
+        this._removeRouteVisuals(visuals);
+        this.routeVisuals.delete(key);
+      }
+    }
+
+    for (const [key, routeState] of routeStates) {
+      let visuals = this.routeVisuals.get(key);
+      if (!visuals) {
+        visuals = this._createRouteVisuals(routeState.contract);
+        if (!visuals) continue;
+        this.routeVisuals.set(key, visuals);
+      }
+
+      this._styleRouteVisual(visuals, routeState);
+      this._animateRouteFlow(visuals, routeState);
     }
   }
 
   /**
-   * Create path line + transport sphere for a trader.
+   * Create the reusable route mesh for a contract.
    */
-  _createVisuals(trader) {
-    const color = this._getProductColor(trader.productId);
+  _createRouteVisuals(contract) {
+    const path = this.simulationEngine.getContractPath(contract);
+    if (!path || path.length < 2) return null;
 
-    // Build path points in world coordinates
-    const points = [];
-    for (const step of trader.path) {
-      const world = gridToWorld(step.gridX, step.gridZ, this.tilemap);
-      const topY = this.tilemap.getTileTopSurface(world.x, world.z) + 0.1;
-      points.push(new THREE.Vector3(world.x, topY, world.z));
+    const color = this._getProductColor(contract.productId);
+    const points = this._buildPathPoints(path);
+    const curve = this._createRouteCurve(points);
+    const tubeGeometry = new THREE.TubeGeometry(curve, Math.max(24, points.length * 6), 0.06, 10, false);
+    const tubeMaterial = new THREE.MeshStandardMaterial({
+      color,
+      emissive: color,
+      emissiveIntensity: 0.18,
+      transparent: true,
+      opacity: 0.45
+    });
+    const routeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
+    this.scene.add(routeMesh);
+
+    const flowPulses = [];
+    for (let i = 0; i < 3; i++) {
+      const material = new THREE.MeshStandardMaterial({
+        color,
+        emissive: color,
+        emissiveIntensity: 0.9,
+        transparent: true,
+        opacity: 0.8
+      });
+      const pulse = new THREE.Mesh(this.flowPulseGeometry, material);
+      pulse.visible = false;
+      this.scene.add(pulse);
+      flowPulses.push({ mesh: pulse, material, offset: i / 3 });
     }
 
-    // Create path line
-    const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
-    const lineMaterial = new THREE.LineBasicMaterial({
-      color: color,
-      transparent: true,
-      opacity: 0.5,
-      linewidth: 2
-    });
-    const pathLine = new THREE.Line(lineGeometry, lineMaterial);
-    this.scene.add(pathLine);
+    return { routeMesh, tubeGeometry, tubeMaterial, curve, color, flowPulses };
+  }
 
+  _buildPathPoints(path) {
+    const points = [];
+    for (const step of path) {
+      const world = gridToWorld(step.gridX, step.gridZ, this.tilemap);
+      const topY = this.tilemap.getTileTopSurface(world.x, world.z) + 0.14;
+      points.push(new THREE.Vector3(world.x, topY, world.z));
+    }
+    return points;
+  }
+
+  _createRouteCurve(points) {
+    const curvePoints = [];
+    for (let i = 0; i < points.length; i++) {
+      const point = points[i];
+      curvePoints.push(point.clone());
+      if (i > 0 && i < points.length - 1) {
+        const prev = points[i - 1];
+        const next = points[i + 1];
+        const bend = point.clone().add(prev).add(next).multiplyScalar(1 / 3);
+        bend.y += 0.03;
+        curvePoints.push(bend);
+      }
+    }
+
+    return new THREE.CatmullRomCurve3(curvePoints, false, 'centripetal', 0.25);
+  }
+
+  _createTraderVisuals(trader) {
+    const color = this._getProductColor(trader.productId);
     // Create transport sphere
     const sphereMaterial = new THREE.MeshStandardMaterial({
-      color: color,
+      color,
       emissive: color,
       emissiveIntensity: 0.5
     });
     const sphere = new THREE.Mesh(this.sphereGeometry, sphereMaterial);
     this.scene.add(sphere);
 
-    return { pathLine, lineGeometry, lineMaterial, sphere, sphereMaterial, points };
+    return { sphere, sphereMaterial };
   }
 
-  /**
-   * Update the sphere position along the path using interpolation.
-   */
-  _updateSpherePosition(trader, sphere) {
-    const pos = this.simulationEngine.getTraderWorldPosition(trader);
+  _updateTraderSpherePosition(trader, sphere) {
+    const pos = this.simulationEngine.getTraderWorldPositionAtProgress(
+      trader,
+      this.simulationEngine.getTickProgress()
+    );
     const topY = this.tilemap.getTileTopSurface(pos.x, pos.z) + 0.25;
     sphere.position.set(pos.x, topY, pos.z);
+  }
+
+  _styleTraderVisual(trader, visuals) {
+    const highlighted = this.selectedObjectId !== null && (
+      trader.sourceObjectId === this.selectedObjectId ||
+      trader.destObjectId === this.selectedObjectId ||
+      (trader.contractId !== null &&
+        this.simulationEngine.getConnectedContracts(this.selectedObjectId)
+          .some(contract => contract.id === trader.contractId))
+    );
+    visuals.sphereMaterial.opacity = highlighted || this.selectedObjectId === null ? 1.0 : 0.35;
+    visuals.sphereMaterial.transparent = visuals.sphereMaterial.opacity < 1.0;
+    visuals.sphereMaterial.emissiveIntensity = highlighted ? 1.2 : 0.55;
+    visuals.sphere.scale.setScalar(highlighted ? 1.15 : 1.0);
+  }
+
+  _styleRouteVisual(visuals, routeState) {
+    const hasSelection = this.selectedObjectId !== null;
+    visuals.tubeMaterial.opacity = routeState.selected ? 0.95 : (hasSelection ? 0.12 : 0.45);
+    visuals.tubeMaterial.emissiveIntensity = routeState.selected ? 0.7 : (routeState.active ? 0.25 : 0.12);
+    visuals.tubeMaterial.color.setHex(visuals.color);
+  }
+
+  _animateRouteFlow(visuals, routeState) {
+    const time = performance.now() * 0.00022;
+    for (const pulse of visuals.flowPulses) {
+      if (!routeState.active && !routeState.selected) {
+        pulse.mesh.visible = false;
+        continue;
+      }
+
+      const t = (time + pulse.offset) % 1;
+      const point = visuals.curve.getPointAt(t);
+      pulse.mesh.position.copy(point);
+      pulse.mesh.visible = true;
+      pulse.material.opacity = routeState.selected ? 0.92 : 0.45;
+      pulse.material.emissiveIntensity = routeState.selected ? 1.0 : 0.55;
+      pulse.mesh.scale.setScalar(routeState.selected ? 1.35 : 1.0);
+    }
+  }
+
+  _getContractVisualKey(contract) {
+    return `contract-${contract.id}`;
   }
 
   /**
    * Remove all Three.js objects for a trader.
    */
   _removeVisuals(visuals) {
-    this.scene.remove(visuals.pathLine);
-    visuals.lineGeometry.dispose();
-    visuals.lineMaterial.dispose();
-
     this.scene.remove(visuals.sphere);
     visuals.sphereMaterial.dispose();
     // Don't dispose shared sphereGeometry
+  }
+
+  _removeRouteVisuals(visuals) {
+    this.scene.remove(visuals.routeMesh);
+    visuals.tubeGeometry.dispose();
+    visuals.tubeMaterial.dispose();
+    for (const pulse of visuals.flowPulses) {
+      this.scene.remove(pulse.mesh);
+      pulse.material.dispose();
+    }
+  }
+
+  setSelectedObjectId(objectId) {
+    this.selectedObjectId = objectId;
   }
 
   /**
@@ -134,10 +281,16 @@ export class TradeRenderer {
    * Dispose all visuals and clean up.
    */
   dispose() {
+    for (const visuals of this.routeVisuals.values()) {
+      this._removeRouteVisuals(visuals);
+    }
+    this.routeVisuals.clear();
+
     for (const visuals of this.traderVisuals.values()) {
       this._removeVisuals(visuals);
     }
     this.traderVisuals.clear();
     this.sphereGeometry.dispose();
+    this.flowPulseGeometry.dispose();
   }
 }

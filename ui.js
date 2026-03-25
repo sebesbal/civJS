@@ -40,6 +40,7 @@ export class UIManager {
       { name: 'onSimulationToggle', target: 'mapEditorUI' },
       { name: 'onSimulationSpeedChange', target: 'mapEditorUI' },
       { name: 'onGenerateRandomFactories', target: 'mapEditorUI' },
+      { name: 'onOverlaySettingsChange', target: 'mapEditorUI' },
     ]);
 
     this.init();

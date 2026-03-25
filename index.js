@@ -11,6 +11,7 @@ import { EconomyIOService } from './application/economy/economy-io-service.js';
 import { GameStateService } from './application/game/state-service.js';
 import { GameSessionService } from './application/game/game-session-service.js';
 import { JsonFilePersistence } from './ui/persistence/json-file-persistence.js';
+import { MapOverlayRenderer } from './ui/visualizers/map-overlay-renderer.js';
 
 const renderer = new THREE.WebGLRenderer({antialias: true});
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -60,6 +61,7 @@ const gameSessionService = new GameSessionService({
 // Simulation engine and trade renderer (created lazily, initialized on first start)
 let simulationEngine = null;
 let tradeRenderer = null;
+const mapOverlayRenderer = new MapOverlayRenderer(scene, tilemap, null, economyEditorService.getGraph());
 
 function createSeededRng(seed) {
   let t = seed >>> 0;
@@ -83,8 +85,14 @@ function getOrCreateSimulationEngine() {
       }
     }
     ui.factoryOverviewUI.onSimulationTick();
+    mapOverlayRenderer.refresh();
   });
   tradeRenderer = gameSessionService.getTradeRenderer();
+  mapOverlayRenderer.setRuntimeReferences({
+    tilemap,
+    simulationEngine,
+    economyManager: economyEditorService.getGraph()
+  });
   return simulationEngine;
 }
 
@@ -144,6 +152,7 @@ function enterSimulationMode() {
 function setupUICallbacks(ui, mapEditor, routeManager) {
   ui.onModeChange = (mode) => {
     mapEditor.setMode(mode);
+    tradeRenderer?.setSelectedObjectId(null);
     if (mode === 'VIEW' || mode === 'SIMULATION') {
       cancelRouteModeIfActive();
     }
@@ -217,6 +226,15 @@ ui.onSimulationSpeedChange = (speed) => {
   }
 };
 
+ui.onOverlaySettingsChange = (settings) => {
+  mapOverlayRenderer.setRuntimeReferences({
+    tilemap,
+    simulationEngine,
+    economyManager: economyEditorService.getGraph()
+  });
+  mapOverlayRenderer.setOverlayConfig(settings);
+};
+
 // Save/Load callbacks
 ui.onSaveGame = () => {
   try {
@@ -269,6 +287,11 @@ ui.onLoadGame = async (file) => {
     // Recreate map editor with new tiles and map config
     mapEditor = new MapEditor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig(), routeManager);
     gameSessionService.setRuntimeReferences({ mapEditor, tilemap, routeManager });
+    mapOverlayRenderer.setRuntimeReferences({
+      tilemap,
+      simulationEngine,
+      economyManager: economyEditorService.getGraph()
+    });
 
     // Reconnect UI callbacks
     setupUICallbacks(ui, mapEditor, routeManager);
@@ -302,6 +325,8 @@ ui.onLoadGame = async (file) => {
       ui.factoryOverviewUI.setSimulationEngine(engine);
     }
 
+    mapOverlayRenderer.refresh();
+
     // Reset camera to default position
     cameraController.reset();
 
@@ -331,6 +356,7 @@ const onMouseDown = (event) => {
   if (result.handled) {
     // If an object was selected in VIEW mode, show the factory inspector
     if ((currentMode === 'VIEW' || currentMode === 'SIMULATION') && result.selectedObject) {
+      tradeRenderer?.setSelectedObjectId(result.selectedObject.id);
       const actorState = simulationEngine ? simulationEngine.getActorState(result.selectedObject.id) : null;
       if (actorState) {
         ui.showFactoryInspector(result.selectedObject, actorState, economyEditorService.getGraph());
@@ -345,6 +371,7 @@ const onMouseDown = (event) => {
   // Hide properties panel when clicking empty space in VIEW mode
   if (currentMode === 'VIEW' || currentMode === 'SIMULATION') {
     ui.hidePropertiesPanel();
+    tradeRenderer?.setSelectedObjectId(null);
   }
 
   // Allow camera dragging in non-edit modes, or in EDIT mode when clicking empty space
@@ -402,9 +429,11 @@ const onContextMenu = (event) => {
       if (result.id !== undefined && result.waypoints !== undefined) {
         // It's a route
         ui.showRoutePropertiesPanel(result);
+        tradeRenderer?.setSelectedObjectId(null);
       } else {
         // It's an object — show inspector if simulation is active, otherwise basic properties
         const actorState = simulationEngine ? simulationEngine.getActorState(result.id) : null;
+        tradeRenderer?.setSelectedObjectId(result.id);
         if (actorState) {
           ui.showFactoryInspector(result, actorState, economyEditorService.getGraph());
         } else {
@@ -413,6 +442,7 @@ const onContextMenu = (event) => {
       }
     } else {
       ui.hidePropertiesPanel();
+      tradeRenderer?.setSelectedObjectId(null);
     }
   }
 };

@@ -10,6 +10,7 @@
  */
 export function findPath(tilemap, start, end, roadTiles) {
   const mapSize = tilemap.getConfig().mapSize;
+  const diagonalCost = Math.SQRT2;
 
   // Build tile lookup for fast access
   const tileMap = new Map();
@@ -36,6 +37,10 @@ export function findPath(tilemap, start, end, roadTiles) {
     { dx: 0, dz: 1 },   // down
     { dx: -1, dz: 0 },  // left
     { dx: 1, dz: 0 },   // right
+    { dx: -1, dz: -1, diagonal: true },
+    { dx: 1, dz: -1, diagonal: true },
+    { dx: -1, dz: 1, diagonal: true },
+    { dx: 1, dz: 1, diagonal: true },
   ];
 
   while (openSet.length > 0) {
@@ -66,8 +71,19 @@ export function findPath(tilemap, start, end, roadTiles) {
       // Water tiles are impassable (tileTypeIndex < 3)
       if (tile.userData.tileTypeIndex < 3) continue;
 
-      // Movement cost: 1.0 for normal tiles, 0.3 for road tiles
-      const moveCost = roadTiles.has(neighborKey) ? 0.3 : 1.0;
+      // Prevent diagonal corner-cutting through impassable terrain.
+      if (dir.diagonal) {
+        const horizontalTile = tileMap.get(`${current.gridX + dir.dx},${current.gridZ}`);
+        const verticalTile = tileMap.get(`${current.gridX},${current.gridZ + dir.dz}`);
+        if (!horizontalTile || !verticalTile) continue;
+        if (horizontalTile.userData.tileTypeIndex < 3 || verticalTile.userData.tileTypeIndex < 3) {
+          continue;
+        }
+      }
+
+      // Movement cost: road preference is preserved and diagonal steps cost sqrt(2).
+      const baseMoveCost = roadTiles.has(neighborKey) ? 0.3 : 1.0;
+      const moveCost = dir.diagonal ? baseMoveCost * diagonalCost : baseMoveCost;
       const tentativeG = (gScore.get(current.key) ?? Infinity) + moveCost;
 
       if (tentativeG < (gScore.get(neighborKey) ?? Infinity)) {
@@ -143,9 +159,13 @@ export function gridToWorld(gridX, gridZ, tilemap) {
   };
 }
 
-// Manhattan distance heuristic
+// Octile distance heuristic for 8-way movement.
 function _heuristic(a, b) {
-  return Math.abs(a.gridX - b.gridX) + Math.abs(a.gridZ - b.gridZ);
+  const dx = Math.abs(a.gridX - b.gridX);
+  const dz = Math.abs(a.gridZ - b.gridZ);
+  const diagonalSteps = Math.min(dx, dz);
+  const straightSteps = Math.max(dx, dz) - diagonalSteps;
+  return (diagonalSteps * Math.SQRT2) + straightSteps;
 }
 
 // Reconstruct path from cameFrom map
