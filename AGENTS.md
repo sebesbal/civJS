@@ -10,7 +10,9 @@ Use it to:
 `navigation_index.md` is the primary navigation reference for this repository. Keep this file short and update the index when the project structure changes in a way that affects code discovery.
 
 ## Directory-Specific Guidance
-
+- The project is plain browser-side ES modules with no build step. Edit source files directly and test by reloading the app.
+- Ignore `node_modules/` during code discovery. `icons/` is mostly asset inventory, not gameplay logic.
+- Prefer the nearest subtree `AGENTS.md` when a task is clearly scoped to one area of the repo.
 
 ## Maintaining These Files
 
