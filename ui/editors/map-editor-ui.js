@@ -3,6 +3,7 @@
 export class MapEditorUI {
   constructor() {
     this.sidebar = null;
+    this.productSidebar = null;
     this.propertiesPanel = null;
     this.currentMode = 'VIEW';
     this.selectedObjectType = null;
@@ -24,7 +25,6 @@ export class MapEditorUI {
     this.onOverlaySettingsChange = null;
     this.simTickLabel = null;
     this.overlayEnabledCheckbox = null;
-    this.overlayProductSelect = null;
     this.overlayMetricSelect = null;
 
     this.init();
@@ -46,7 +46,7 @@ export class MapEditorUI {
       }
     }
     this.rebuildObjectButtons();
-    this._rebuildOverlayProductOptions();
+    this._emitOverlaySettingsChange();
   }
 
   rebuildObjectButtons() {
@@ -111,6 +111,10 @@ export class MapEditorUI {
     this.sidebar.id = 'sidebar';
     document.body.appendChild(this.sidebar);
 
+    this.productSidebar = document.createElement('div');
+    this.productSidebar.id = 'product-sidebar';
+    document.body.appendChild(this.productSidebar);
+
     // Mode toggle section
     const modeSection = document.createElement('div');
     modeSection.className = 'sidebar-section';
@@ -147,10 +151,10 @@ export class MapEditorUI {
     this.objectsSection.className = 'sidebar-section';
 
     const objectsTitle = document.createElement('h3');
-    objectsTitle.textContent = 'Place Factories';
+    objectsTitle.textContent = 'Products';
     this.objectsSection.appendChild(objectsTitle);
 
-    this.sidebar.appendChild(this.objectsSection);
+    this.productSidebar.appendChild(this.objectsSection);
 
     // Special buildings section (warehouse, etc.)
     this.specialSection = document.createElement('div');
@@ -277,11 +281,6 @@ export class MapEditorUI {
     overlayToggleRow.appendChild(this.overlayEnabledCheckbox);
     overlaySection.appendChild(overlayToggleRow);
 
-    this.overlayProductSelect = document.createElement('select');
-    this.overlayProductSelect.className = 'overlay-select';
-    this.overlayProductSelect.addEventListener('change', () => this._emitOverlaySettingsChange());
-    overlaySection.appendChild(this.overlayProductSelect);
-
     this.overlayMetricSelect = document.createElement('select');
     this.overlayMetricSelect.className = 'overlay-select';
     for (const option of [
@@ -386,6 +385,8 @@ export class MapEditorUI {
     if (this.onObjectTypeSelect) {
       this.onObjectTypeSelect(this.selectedObjectType);
     }
+
+    this._emitOverlaySettingsChange();
   }
 
   toggleRouteMode() {
@@ -407,42 +408,22 @@ export class MapEditorUI {
     routeBtn.textContent = enabled ? 'Cancel Road' : 'Create Road';
   }
 
-  _rebuildOverlayProductOptions() {
-    if (!this.overlayProductSelect) return;
+  _getSelectedProductId() {
+    if (!this.selectedObjectType) return '';
 
-    const previousValue = this.overlayProductSelect.value;
-    this.overlayProductSelect.innerHTML = '';
+    const selectedDef = this.objectTypes[this.selectedObjectType];
+    if (!selectedDef || selectedDef.isWarehouse) return '';
 
-    const productTypes = Object.values(this.objectTypes)
-      .filter(def => !def.isWarehouse && def.productId !== null && def.productId !== undefined)
-      .sort((a, b) => a.productId - b.productId);
-
-    for (const def of productTypes) {
-      const option = document.createElement('option');
-      option.value = String(def.productId);
-      option.textContent = def.name.replace(/ Factory$/, '');
-      this.overlayProductSelect.appendChild(option);
-    }
-
-    if (productTypes.length === 0) {
-      const option = document.createElement('option');
-      option.value = '';
-      option.textContent = 'No products';
-      this.overlayProductSelect.appendChild(option);
-      this.overlayProductSelect.disabled = true;
-      return;
-    }
-
-    this.overlayProductSelect.disabled = false;
-    const hasPrevious = productTypes.some(def => String(def.productId) === previousValue);
-    this.overlayProductSelect.value = hasPrevious ? previousValue : String(productTypes[0].productId);
+    return selectedDef.productId === null || selectedDef.productId === undefined
+      ? ''
+      : String(selectedDef.productId);
   }
 
   _emitOverlaySettingsChange() {
     if (this.onOverlaySettingsChange) {
       this.onOverlaySettingsChange({
         enabled: !!this.overlayEnabledCheckbox?.checked,
-        productId: this.overlayProductSelect?.value ?? '',
+        productId: this._getSelectedProductId(),
         metric: this.overlayMetricSelect?.value ?? 'buy'
       });
     }
@@ -883,10 +864,12 @@ export class MapEditorUI {
 
   show() {
     this.sidebar.classList.remove('hidden');
+    this.productSidebar?.classList.remove('hidden');
   }
 
   hide() {
     this.sidebar.classList.add('hidden');
+    this.productSidebar?.classList.add('hidden');
     this.propertiesPanel.classList.add('hidden');
   }
 }
