@@ -114,6 +114,13 @@ export class MapEditorUI {
     modeTitle.textContent = 'Mode';
     modeSection.appendChild(modeTitle);
 
+    const simulationModeBtn = document.createElement('button');
+    simulationModeBtn.className = 'mode-btn';
+    simulationModeBtn.textContent = 'Simulation';
+    simulationModeBtn.dataset.mode = 'SIMULATION';
+    simulationModeBtn.addEventListener('click', () => this.setMode('SIMULATION'));
+    modeSection.appendChild(simulationModeBtn);
+
     const viewModeBtn = document.createElement('button');
     viewModeBtn.className = 'mode-btn active';
     viewModeBtn.textContent = 'View';
@@ -308,8 +315,8 @@ export class MapEditorUI {
       btn.classList.toggle('active', btn.dataset.mode === mode);
     });
 
-    // Clear object type selection when switching to view mode
-    if (mode === 'VIEW') {
+    // Clear object type selection when switching to a non-editing mode
+    if (mode === 'VIEW' || mode === 'SIMULATION') {
       this.selectObjectType(null);
     }
 
@@ -340,19 +347,19 @@ export class MapEditorUI {
     const routeBtn = document.querySelector('.route-btn');
     const isActive = routeBtn.classList.contains('active');
 
-    if (isActive) {
-      routeBtn.classList.remove('active');
-      routeBtn.textContent = 'Create Road';
-      if (this.onRouteModeToggle) {
-        this.onRouteModeToggle(false);
-      }
-    } else {
-      routeBtn.classList.add('active');
-      routeBtn.textContent = 'Cancel Road';
-      if (this.onRouteModeToggle) {
-        this.onRouteModeToggle(true);
-      }
+    this.setRouteModeActive(!isActive);
+
+    if (this.onRouteModeToggle) {
+      this.onRouteModeToggle(!isActive);
     }
+  }
+
+  setRouteModeActive(enabled) {
+    const routeBtn = document.querySelector('.route-btn');
+    if (!routeBtn) return;
+
+    routeBtn.classList.toggle('active', enabled);
+    routeBtn.textContent = enabled ? 'Cancel Road' : 'Create Road';
   }
 
   showPropertiesPanel(objectData) {

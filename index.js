@@ -61,6 +61,17 @@ const gameSessionService = new GameSessionService({
 let simulationEngine = null;
 let tradeRenderer = null;
 
+function createSeededRng(seed) {
+  let t = seed >>> 0;
+  return () => {
+    t += 0x6D2B79F5;
+    let x = t;
+    x = Math.imul(x ^ (x >>> 15), x | 1);
+    x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 function getOrCreateSimulationEngine() {
   simulationEngine = gameSessionService.getOrCreateSimulationEngine((tickCount) => {
     ui.setSimulationTick(tickCount);
@@ -77,12 +88,67 @@ function getOrCreateSimulationEngine() {
   return simulationEngine;
 }
 
+function cancelRouteModeIfActive() {
+  if (!routeManager.isInRouteCreationMode()) {
+    return;
+  }
+
+  routeManager.cancelRouteCreation();
+  mapEditor.setRouteMode(false);
+  ui.mapEditorUI?.setRouteModeActive(false);
+}
+
+function enterSimulationMode() {
+  const economyManager = economyEditorService.getGraph();
+  const objectManager = mapEditor.getObjectManager();
+
+  if (objectManager.getAllObjects().length === 0) {
+    const economyNodes = economyManager.getAllNodes();
+    if (economyNodes.length === 0) {
+      const engine = getOrCreateSimulationEngine();
+      engine.stop();
+      engine.initialize();
+      ui.factoryOverviewUI.setSimulationEngine(engine);
+      ui.setSimulationTick(engine.tickCount);
+      ui.setSimulationRunning(false);
+      alert('Cannot start simulation: the economy has no products.');
+      return;
+    }
+
+    const created = randomFactoryGenerator.generate(economyManager, objectManager, tilemap, {
+      rng: createSeededRng(1337)
+    });
+
+    if (created.length === 0) {
+      const engine = getOrCreateSimulationEngine();
+      engine.stop();
+      engine.initialize();
+      ui.factoryOverviewUI.setSimulationEngine(engine);
+      ui.setSimulationTick(engine.tickCount);
+      ui.setSimulationRunning(false);
+      alert('Cannot start simulation: no factories could be generated on the current map.');
+      return;
+    }
+  }
+
+  const engine = getOrCreateSimulationEngine();
+  ui.factoryOverviewUI.setSimulationEngine(engine);
+  engine.stop();
+  engine.initialize();
+  ui.setSimulationTick(engine.tickCount);
+  engine.start();
+  ui.setSimulationRunning(true);
+}
+
 // Helper function to setup UI callbacks
 function setupUICallbacks(ui, mapEditor, routeManager) {
   ui.onModeChange = (mode) => {
     mapEditor.setMode(mode);
-    if (mode === 'VIEW') {
-      routeManager.cancelRouteCreation();
+    if (mode === 'VIEW' || mode === 'SIMULATION') {
+      cancelRouteModeIfActive();
+    }
+    if (mode === 'SIMULATION') {
+      enterSimulationMode();
     }
   };
 
@@ -264,7 +330,7 @@ const onMouseDown = (event) => {
   const result = mapEditor.handleMouseDown(event);
   if (result.handled) {
     // If an object was selected in VIEW mode, show the factory inspector
-    if (currentMode === 'VIEW' && result.selectedObject) {
+    if ((currentMode === 'VIEW' || currentMode === 'SIMULATION') && result.selectedObject) {
       const actorState = simulationEngine ? simulationEngine.getActorState(result.selectedObject.id) : null;
       if (actorState) {
         ui.showFactoryInspector(result.selectedObject, actorState, economyEditorService.getGraph());
@@ -277,13 +343,13 @@ const onMouseDown = (event) => {
   }
 
   // Hide properties panel when clicking empty space in VIEW mode
-  if (currentMode === 'VIEW') {
+  if (currentMode === 'VIEW' || currentMode === 'SIMULATION') {
     ui.hidePropertiesPanel();
   }
 
-  // Allow camera dragging in VIEW mode, or in EDIT mode when clicking empty space
+  // Allow camera dragging in non-edit modes, or in EDIT mode when clicking empty space
   // Also allow with Shift modifier in any mode
-  if (currentMode === 'VIEW' || currentMode === 'EDIT' || event.shiftKey) {
+  if (currentMode === 'VIEW' || currentMode === 'SIMULATION' || currentMode === 'EDIT' || event.shiftKey) {
     cameraController.handleMouseDown(event, true);
   }
 };
@@ -329,7 +395,7 @@ const onContextMenu = (event) => {
   }
   
   // Show properties panel for objects or routes (in any mode)
-  if (currentMode === 'EDIT' || currentMode === 'VIEW') {
+  if (currentMode === 'EDIT' || currentMode === 'VIEW' || currentMode === 'SIMULATION') {
     const result = mapEditor.handleRightClick(event);
     if (result) {
       // Check if it's a route or object
@@ -378,11 +444,13 @@ const onKeyDown = (event) => {
       }
     }
     
-    // Delete selected object
-    const selectedObject = mapEditor.getSelectedObject();
-    if (selectedObject) {
-      mapEditor.deleteObject(selectedObject.id);
-      ui.hidePropertiesPanel();
+    // Delete selected object only in edit mode
+    if (currentMode === 'EDIT') {
+      const selectedObject = mapEditor.getSelectedObject();
+      if (selectedObject) {
+        mapEditor.deleteObject(selectedObject.id);
+        ui.hidePropertiesPanel();
+      }
     }
   }
 };

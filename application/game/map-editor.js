@@ -54,7 +54,7 @@ export class MapEditor {
 
   setMode(mode) {
     this.mode = mode;
-    if (mode === 'VIEW') {
+    if (mode === 'VIEW' || mode === 'SIMULATION') {
       this.objectManager.deselectObject();
       this.selectedObjectType = null;
       this.routeManager.deselectRoute();
@@ -155,8 +155,8 @@ export class MapEditor {
   handleMouseDown(event) {
     const result = this.raycast(event);
 
-    // Handle object clicks in VIEW mode (for inspection)
-    if (this.mode === 'VIEW' && !this.isRouteMode) {
+    // Handle object clicks in non-editing inspection modes.
+    if ((this.mode === 'VIEW' || this.mode === 'SIMULATION') && !this.isRouteMode) {
       this.routeManager.deselectRoute();
 
       if (result && result.type === 'object') {

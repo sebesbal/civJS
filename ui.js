@@ -3,7 +3,6 @@ import { MapEditorUI } from './ui/editors/map-editor-ui.js';
 import { EconomyEditorUI } from './ui/editors/economy-editor-ui.js';
 import { FactoryOverviewUI } from './ui/viewers/factory-overview-ui.js';
 import { generateObjectTypesFromEconomy } from './application/game/object-types.js';
-import { MapTest } from './test/map-test.js';
 import { SimulationTest } from './test/simulation-test.js';
 import { EconomyEditorService } from './application/economy/economy-editor-service.js';
 import { EconomyIOService } from './application/economy/economy-io-service.js';
@@ -110,10 +109,7 @@ export class UIManager {
   }
 
   _normalizeTestTab(tabName) {
-    if (tabName === 'simulation' || tabName === 'test3') {
-      return 'simulation';
-    }
-    return 'map';
+    return 'simulation';
   }
 
   createTestEditorUI() {
@@ -140,7 +136,6 @@ export class UIManager {
 
     // Create test tab buttons
     const testTabs = [
-      { key: 'map', label: 'Map' },
       { key: 'simulation', label: 'Simulation' },
     ];
 
@@ -176,17 +171,13 @@ export class UIManager {
       container.id = `${tab.key}-container`;
       container.style.height = '100%';
       container.style.minHeight = '0';
-      if (tab.key !== 'map') {
-        container.style.display = 'none';
-      }
       this.testEditorUI.appendChild(container);
       this.testTabContainers[tab.key] = container;
     }
 
     // Initialize tests
-    this.mapTest = null;
     this.simulationTest = null;
-    // Load saved test tab from localStorage, default to 'map'
+    // Load saved test tab from localStorage, default to 'simulation'
     const savedTestTab = this._normalizeTestTab(localStorage.getItem('lastTestTab'));
     this.currentTestTab = savedTestTab;
     this.setTestTab(savedTestTab);
@@ -208,9 +199,6 @@ export class UIManager {
     }
 
     // Initialize tests if needed
-    if (tabName === 'map' && !this.mapTest) {
-      this.mapTest = new MapTest(this.testTabContainers.map);
-    }
     if (tabName === 'simulation' && !this.simulationTest) {
       this.simulationTest = new SimulationTest(this.testTabContainers.simulation, {
         factoryOverviewUI: this.factoryOverviewUI
