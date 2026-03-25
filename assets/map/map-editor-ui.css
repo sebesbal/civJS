@@ -278,6 +278,37 @@
   margin-bottom: 4px;
 }
 
+.overlay-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: #aaaaaa;
+  margin-bottom: 8px;
+}
+
+.overlay-select {
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 14px;
+  outline: none;
+}
+
+.overlay-select:focus {
+  border-color: #4a9eff;
+}
+
+.overlay-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .sim-tick-label {
   font-size: 12px;
   color: #aaaaaa;

@@ -268,7 +268,7 @@ export class MapEditorUI {
     overlaySection.appendChild(overlayTitle);
 
     const overlayToggleRow = document.createElement('label');
-    overlayToggleRow.className = 'speed-label';
+    overlayToggleRow.className = 'overlay-toggle-row';
     overlayToggleRow.textContent = 'Enable';
     this.overlayEnabledCheckbox = document.createElement('input');
     this.overlayEnabledCheckbox.type = 'checkbox';
@@ -278,12 +278,12 @@ export class MapEditorUI {
     overlaySection.appendChild(overlayToggleRow);
 
     this.overlayProductSelect = document.createElement('select');
-    this.overlayProductSelect.className = 'speed-slider';
+    this.overlayProductSelect.className = 'overlay-select';
     this.overlayProductSelect.addEventListener('change', () => this._emitOverlaySettingsChange());
     overlaySection.appendChild(this.overlayProductSelect);
 
     this.overlayMetricSelect = document.createElement('select');
-    this.overlayMetricSelect.className = 'speed-slider';
+    this.overlayMetricSelect.className = 'overlay-select';
     for (const option of [
       { value: 'buy', label: 'Buy Price' },
       { value: 'productionCost', label: 'Production Cost' },

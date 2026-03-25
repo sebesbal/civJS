@@ -109,7 +109,7 @@ export class TradeRenderer {
     if (!path || path.length < 2) return null;
 
     const color = this._getProductColor(contract.productId);
-    const points = this._buildPathPoints(path);
+    const points = this._simplifyPathPoints(this._buildPathPoints(path));
     const curve = this._createRouteCurve(points);
     const tubeGeometry = new THREE.TubeGeometry(curve, Math.max(24, points.length * 6), 0.06, 10, false);
     const tubeMaterial = new THREE.MeshStandardMaterial({
@@ -150,21 +150,62 @@ export class TradeRenderer {
     return points;
   }
 
-  _createRouteCurve(points) {
-    const curvePoints = [];
-    for (let i = 0; i < points.length; i++) {
-      const point = points[i];
-      curvePoints.push(point.clone());
-      if (i > 0 && i < points.length - 1) {
-        const prev = points[i - 1];
-        const next = points[i + 1];
-        const bend = point.clone().add(prev).add(next).multiplyScalar(1 / 3);
-        bend.y += 0.03;
-        curvePoints.push(bend);
+  _simplifyPathPoints(points) {
+    if (points.length <= 2) return points.map(point => point.clone());
+
+    const simplified = [points[0].clone()];
+
+    for (let i = 1; i < points.length - 1; i++) {
+      const prev = points[i - 1];
+      const current = points[i];
+      const next = points[i + 1];
+
+      const incomingX = Math.sign(current.x - prev.x);
+      const incomingZ = Math.sign(current.z - prev.z);
+      const outgoingX = Math.sign(next.x - current.x);
+      const outgoingZ = Math.sign(next.z - current.z);
+
+      if (incomingX !== outgoingX || incomingZ !== outgoingZ) {
+        simplified.push(current.clone());
       }
     }
 
-    return new THREE.CatmullRomCurve3(curvePoints, false, 'centripetal', 0.25);
+    simplified.push(points[points.length - 1].clone());
+    return simplified;
+  }
+
+  _createRouteCurve(points) {
+    if (points.length === 2) {
+      return new THREE.LineCurve3(points[0], points[1]);
+    }
+
+    const curvePath = new THREE.CurvePath();
+    let segmentStart = points[0].clone();
+
+    for (let i = 1; i < points.length - 1; i++) {
+      const current = points[i];
+      const next = points[i + 1];
+
+      const incoming = current.clone().sub(points[i - 1]);
+      const outgoing = next.clone().sub(current);
+      const incomingLength = incoming.length();
+      const outgoingLength = outgoing.length();
+
+      if (incomingLength < 1e-6 || outgoingLength < 1e-6) {
+        continue;
+      }
+
+      const cornerRadius = Math.min(0.18, incomingLength * 0.35, outgoingLength * 0.35);
+      const entry = current.clone().addScaledVector(incoming.normalize(), -cornerRadius);
+      const exit = current.clone().addScaledVector(outgoing.normalize(), cornerRadius);
+
+      curvePath.add(new THREE.LineCurve3(segmentStart.clone(), entry));
+      curvePath.add(new THREE.QuadraticBezierCurve3(entry, current.clone(), exit));
+      segmentStart = exit;
+    }
+
+    curvePath.add(new THREE.LineCurve3(segmentStart, points[points.length - 1].clone()));
+    return curvePath;
   }
 
   _createTraderVisuals(trader) {
