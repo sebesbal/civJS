@@ -55,6 +55,7 @@ Agent-oriented map of the repository for fast code discovery. Prefer this file o
 ## Tests And Diagnostics
 - `e2e/smoke.spec.js`: app shell and editor-mode smoke coverage.
 - `e2e/persistence-services.spec.js`: persistence-related coverage.
+- `e2e/factory-overview-aggregator.spec.js`: focused browser-side coverage for factory overview aggregation math and output shape.
 - `test/simulation-test.js`: the only in-app harness currently exposed through Test mode.
 - `test/`: interactive diagnostics area, but not the main CI entrypoint.
 - `scripts/econ-iteration-bench.mjs`: ad hoc economy performance experiment.
