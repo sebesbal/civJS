@@ -347,6 +347,16 @@ export class MapEditorUI {
     this.overlayControl.id = 'map-overlay-control';
     this.overlayControl.setAttribute('aria-label', 'Map overlays');
 
+    this.overlayControl.appendChild(this._createOverlayTrigger());
+
+    const { optionsPanel, buttons } = this._createOverlayOptionsPanel();
+    this.overlayMetricButtons = buttons;
+    this.overlayControl.appendChild(optionsPanel);
+    document.body.appendChild(this.overlayControl);
+    this._syncOverlayMetricSelection();
+  }
+
+  _createOverlayTrigger() {
     const trigger = document.createElement('button');
     trigger.type = 'button';
     trigger.className = 'overlay-trigger-card';
@@ -355,6 +365,7 @@ export class MapEditorUI {
 
     const triggerPreview = document.createElement('span');
     triggerPreview.className = 'overlay-trigger-preview';
+
     const activePreview = document.createElement('span');
     activePreview.className = 'overlay-option-preview overlay-trigger-active-preview';
     triggerPreview.appendChild(activePreview);
@@ -370,67 +381,72 @@ export class MapEditorUI {
     triggerLabel.textContent = 'Layers';
     trigger.appendChild(triggerLabel);
 
-    this.overlayControl.appendChild(trigger);
+    return trigger;
+  }
 
+  _createOverlayOptionsPanel() {
     const optionsPanel = document.createElement('div');
     optionsPanel.className = 'overlay-options-panel';
     optionsPanel.setAttribute('role', 'listbox');
     optionsPanel.setAttribute('aria-label', 'Overlay metric');
 
-    const offButton = document.createElement('button');
-    offButton.type = 'button';
-    offButton.className = 'overlay-option-card overlay-option-off';
-    offButton.dataset.metric = '';
-    offButton.dataset.enabled = 'false';
-    offButton.setAttribute('role', 'option');
+    const buttons = [
+      this._createOverlayOptionButton({
+        value: '',
+        label: 'Off',
+        previewClass: 'overlay-preview-off',
+        enabled: false,
+        extraClassName: 'overlay-option-off'
+      })
+    ];
 
-    const offPreview = document.createElement('span');
-    offPreview.className = 'overlay-option-preview overlay-preview-off';
-    offButton.appendChild(offPreview);
+    this.overlayMetricOptions.forEach(option => {
+      buttons.push(this._createOverlayOptionButton({
+        value: option.value,
+        label: option.label,
+        previewClass: option.previewClass,
+        enabled: true
+      }));
+    });
 
-    const offLabel = document.createElement('span');
-    offLabel.className = 'overlay-option-label';
-    offLabel.textContent = 'Off';
-    offButton.appendChild(offLabel);
+    buttons.forEach(button => optionsPanel.appendChild(button));
 
-    offButton.addEventListener('click', () => {
-      this._setOverlayEnabled(false);
+    return { optionsPanel, buttons };
+  }
+
+  _createOverlayOptionButton({
+    value,
+    label,
+    previewClass,
+    enabled,
+    extraClassName = ''
+  }) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = ['overlay-option-card', extraClassName].filter(Boolean).join(' ');
+    button.dataset.metric = value;
+    button.dataset.enabled = enabled ? 'true' : 'false';
+    button.setAttribute('role', 'option');
+    button.setAttribute('aria-selected', 'false');
+
+    const preview = document.createElement('span');
+    preview.className = `overlay-option-preview ${previewClass}`;
+    button.appendChild(preview);
+
+    const labelElement = document.createElement('span');
+    labelElement.className = 'overlay-option-label';
+    labelElement.textContent = label;
+    button.appendChild(labelElement);
+
+    button.addEventListener('click', () => {
+      if (enabled) {
+        this.selectedOverlayMetric = value;
+      }
+      this._setOverlayEnabled(enabled);
       this._emitOverlaySettingsChange();
     });
-    optionsPanel.appendChild(offButton);
 
-    this.overlayMetricButtons = this.overlayMetricOptions.map(option => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'overlay-option-card';
-      button.dataset.metric = option.value;
-      button.dataset.enabled = 'true';
-      button.setAttribute('role', 'option');
-      button.setAttribute('aria-selected', 'false');
-
-      const preview = document.createElement('span');
-      preview.className = `overlay-option-preview ${option.previewClass}`;
-      button.appendChild(preview);
-
-      const label = document.createElement('span');
-      label.className = 'overlay-option-label';
-      label.textContent = option.label;
-      button.appendChild(label);
-
-      button.addEventListener('click', () => {
-        this.selectedOverlayMetric = option.value;
-        this._setOverlayEnabled(true);
-        this._emitOverlaySettingsChange();
-      });
-
-      optionsPanel.appendChild(button);
-      return button;
-    });
-
-    this.overlayMetricButtons.unshift(offButton);
-    this.overlayControl.appendChild(optionsPanel);
-    document.body.appendChild(this.overlayControl);
-    this._syncOverlayMetricSelection();
+    return button;
   }
 
   setMode(mode) {
@@ -524,21 +540,33 @@ export class MapEditorUI {
     }
 
     if (this.overlayControl) {
-      const activeOption = this.overlayMetricOptions.find(option => option.value === this.selectedOverlayMetric);
-      const previewClass = this._isOverlayEnabled() && activeOption
-        ? activeOption.previewClass
-        : 'overlay-preview-off';
       const triggerPreview = this.overlayControl.querySelector('.overlay-trigger-active-preview');
       const triggerLabel = this.overlayControl.querySelector('.overlay-trigger-label');
       if (triggerPreview) {
-        triggerPreview.className = `overlay-option-preview overlay-trigger-active-preview ${previewClass}`;
+        triggerPreview.className = this._getOverlayTriggerPreviewClass();
       }
       if (triggerLabel) {
-        triggerLabel.textContent = this._isOverlayEnabled() && activeOption
-          ? activeOption.label
-          : 'Layers';
+        triggerLabel.textContent = this._getOverlayTriggerLabel();
       }
     }
+  }
+
+  _getActiveOverlayOption() {
+    if (!this._isOverlayEnabled()) {
+      return null;
+    }
+
+    return this.overlayMetricOptions.find(option => option.value === this.selectedOverlayMetric) || null;
+  }
+
+  _getOverlayTriggerPreviewClass() {
+    const activeOption = this._getActiveOverlayOption();
+    const previewClass = activeOption ? activeOption.previewClass : 'overlay-preview-off';
+    return `overlay-option-preview overlay-trigger-active-preview ${previewClass}`;
+  }
+
+  _getOverlayTriggerLabel() {
+    return this._getActiveOverlayOption()?.label || 'Layers';
   }
 
   _setOverlayEnabled(enabled) {

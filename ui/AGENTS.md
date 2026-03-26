@@ -8,5 +8,5 @@ Read `navigation_index.md` in this directory before broad UI changes.
 ## Discovery Tips
 - If the issue is "buttons/sidebar/panel behavior", start in `ui/editors/`.
 - If the issue is "how something is drawn or animated", start in `ui/visualizers/`.
-- Map overlay work usually spans `ui/editors/map-editor-ui.js` and `ui/visualizers/map-overlay-renderer.js`.
+- Map overlay work usually spans `ui/editors/map-editor-ui.js` for chooser DOM/state and `ui/visualizers/map-overlay-renderer.js` for tile heatmap rendering.
 - Factory overview work usually spans `ui/viewers/factory-overview-ui.js`, `ui/visualizers/factory-overview-visualizer.js`, and `application/game/factory-overview-aggregator.js`.
