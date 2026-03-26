@@ -1,13 +1,13 @@
 # CivJS - Project Guide
 
 ## Overview
-A civilization-style browser game built with Three.js. Single-page app with multiple editor modes: Map Editor (3D isometric tile map), Economy Editor (product DAG visualizer), and Test Editor.
+A civilization-style browser game built with Three.js. Single-page app with multiple editor modes: Map Editor (3D isometric tile map), Economy Editor (product DAG visualizer), Factory Overview, and Test Editor.
 
 ## Tech Stack
 - Vanilla JS (ES modules, no bundler/transpiler)
 - Three.js for 3D rendering
-- Served via simple HTTP server (e.g., `npx serve`)
-- No package.json / no npm dependencies beyond Three.js CDN or import map
+- Served directly as static files; local automation uses `serve.ps1`
+- `package.json` is present for Playwright smoke tests
 
 ## Architecture
 
@@ -42,13 +42,11 @@ A civilization-style browser game built with Three.js. Single-page app with mult
   - `ui/visualizers/factory-overview-visualizer.js`
   - `application/game/factory-overview-aggregator.js`
 
-- **Test Editor**: Test harnesses for components
-  - `test/viewport-controller-test.js`, `test/object-scene-test.js`, `test/canvas-test-base.js`
+- **Test Editor**: currently exposes the simulation harness only
+  - `test/simulation-test.js`
 
 ### Shared Utilities (`utils/`)
-- `orthographic-viewer-base.js` - base class for 2D orthographic viewers (economy editor, tests)
-- `viewport-controller.js` - pan/zoom for orthographic views
-- `save-load-base.js` - shared save/load file handling
+- `orthographic-viewer-base.js` - shared base class for the economy editor and factory overview canvases
 
 ### Key Data Flow
 - Economy nodes (products) → `generateObjectTypesFromEconomy()` → factory types for map editor
@@ -59,6 +57,6 @@ A civilization-style browser game built with Three.js. Single-page app with mult
 ## Conventions
 - UI classes create their own DOM elements in constructor/init
 - Callbacks use simple property assignment pattern (e.g., `ui.onModeChange = (mode) => {...}`)
-- Editor UIs extend OrthographicViewerBase for 2D viewers
+- Canvas-based economy/overview screens extend `OrthographicViewerBase`
 - CSS in separate files per editor (map-editor-ui.css, economy-editor-ui.css)
 - No build step - edit and refresh browser

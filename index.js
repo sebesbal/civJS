@@ -88,12 +88,51 @@ function getOrCreateSimulationEngine() {
     mapOverlayRenderer.refresh();
   });
   tradeRenderer = gameSessionService.getTradeRenderer();
+  updateOverlayRuntimeReferences();
+  return simulationEngine;
+}
+
+function updateOverlayRuntimeReferences() {
   mapOverlayRenderer.setRuntimeReferences({
     tilemap,
     simulationEngine,
     economyManager: economyEditorService.getGraph()
   });
-  return simulationEngine;
+}
+
+function syncSimulationUI(engine, { running = engine?.isRunning ?? false } = {}) {
+  if (!engine) {
+    return;
+  }
+
+  ui.factoryOverviewUI.setSimulationEngine(engine);
+  ui.setSimulationTick(engine.tickCount);
+  ui.setSimulationRunning(running);
+}
+
+function resetSimulationEngine({ start = false } = {}) {
+  const engine = getOrCreateSimulationEngine();
+  engine.stop();
+  engine.initialize();
+  syncSimulationUI(engine, { running: false });
+
+  if (start) {
+    engine.start();
+    ui.setSimulationRunning(true);
+  }
+
+  return engine;
+}
+
+function showSelectedObjectDetails(selectedObject) {
+  tradeRenderer?.setSelectedObjectId(selectedObject.id);
+  const actorState = simulationEngine ? simulationEngine.getActorState(selectedObject.id) : null;
+  if (actorState) {
+    ui.showFactoryInspector(selectedObject, actorState, economyEditorService.getGraph());
+    return;
+  }
+
+  ui.showPropertiesPanel(selectedObject);
 }
 
 function cancelRouteModeIfActive() {
@@ -113,12 +152,7 @@ function enterSimulationMode() {
   if (objectManager.getAllObjects().length === 0) {
     const economyNodes = economyManager.getAllNodes();
     if (economyNodes.length === 0) {
-      const engine = getOrCreateSimulationEngine();
-      engine.stop();
-      engine.initialize();
-      ui.factoryOverviewUI.setSimulationEngine(engine);
-      ui.setSimulationTick(engine.tickCount);
-      ui.setSimulationRunning(false);
+      resetSimulationEngine();
       alert('Cannot start simulation: the economy has no products.');
       return;
     }
@@ -128,24 +162,13 @@ function enterSimulationMode() {
     });
 
     if (created.length === 0) {
-      const engine = getOrCreateSimulationEngine();
-      engine.stop();
-      engine.initialize();
-      ui.factoryOverviewUI.setSimulationEngine(engine);
-      ui.setSimulationTick(engine.tickCount);
-      ui.setSimulationRunning(false);
+      resetSimulationEngine();
       alert('Cannot start simulation: no factories could be generated on the current map.');
       return;
     }
   }
 
-  const engine = getOrCreateSimulationEngine();
-  ui.factoryOverviewUI.setSimulationEngine(engine);
-  engine.stop();
-  engine.initialize();
-  ui.setSimulationTick(engine.tickCount);
-  engine.start();
-  ui.setSimulationRunning(true);
+  resetSimulationEngine({ start: true });
 }
 
 // Helper function to setup UI callbacks
@@ -208,15 +231,13 @@ ui.onGenerateRandomFactories = (totalFactories = null) => {
 
 ui.onSimulationToggle = () => {
   const engine = getOrCreateSimulationEngine();
-  ui.factoryOverviewUI.setSimulationEngine(engine);
   if (engine.isRunning) {
     engine.stop();
-    ui.setSimulationRunning(false);
+    syncSimulationUI(engine, { running: false });
   } else {
     engine.initialize();
-    ui.setSimulationTick(engine.tickCount);
     engine.start();
-    ui.setSimulationRunning(true);
+    syncSimulationUI(engine, { running: true });
   }
 };
 
@@ -227,11 +248,7 @@ ui.onSimulationSpeedChange = (speed) => {
 };
 
 ui.onOverlaySettingsChange = (settings) => {
-  mapOverlayRenderer.setRuntimeReferences({
-    tilemap,
-    simulationEngine,
-    economyManager: economyEditorService.getGraph()
-  });
+  updateOverlayRuntimeReferences();
   mapOverlayRenderer.setOverlayConfig(settings);
 };
 
@@ -287,11 +304,7 @@ ui.onLoadGame = async (file) => {
     // Recreate map editor with new tiles and map config
     mapEditor = new MapEditor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig(), routeManager);
     gameSessionService.setRuntimeReferences({ mapEditor, tilemap, routeManager });
-    mapOverlayRenderer.setRuntimeReferences({
-      tilemap,
-      simulationEngine,
-      economyManager: economyEditorService.getGraph()
-    });
+    updateOverlayRuntimeReferences();
 
     // Reconnect UI callbacks
     setupUICallbacks(ui, mapEditor, routeManager);
@@ -320,9 +333,7 @@ ui.onLoadGame = async (file) => {
     if (gameState.simulation) {
       const engine = getOrCreateSimulationEngine();
       engine.loadFromData(gameState.simulation);
-      ui.setSimulationTick(engine.tickCount);
-      ui.setSimulationRunning(engine.isRunning);
-      ui.factoryOverviewUI.setSimulationEngine(engine);
+      syncSimulationUI(engine);
     }
 
     mapOverlayRenderer.refresh();
@@ -356,13 +367,7 @@ const onMouseDown = (event) => {
   if (result.handled) {
     // If an object was selected in VIEW mode, show the factory inspector
     if ((currentMode === 'VIEW' || currentMode === 'SIMULATION') && result.selectedObject) {
-      tradeRenderer?.setSelectedObjectId(result.selectedObject.id);
-      const actorState = simulationEngine ? simulationEngine.getActorState(result.selectedObject.id) : null;
-      if (actorState) {
-        ui.showFactoryInspector(result.selectedObject, actorState, economyEditorService.getGraph());
-      } else {
-        ui.showPropertiesPanel(result.selectedObject);
-      }
+      showSelectedObjectDetails(result.selectedObject);
     }
     cameraController.handleMouseDown(event, false);
     return;
@@ -432,13 +437,7 @@ const onContextMenu = (event) => {
         tradeRenderer?.setSelectedObjectId(null);
       } else {
         // It's an object — show inspector if simulation is active, otherwise basic properties
-        const actorState = simulationEngine ? simulationEngine.getActorState(result.id) : null;
-        tradeRenderer?.setSelectedObjectId(result.id);
-        if (actorState) {
-          ui.showFactoryInspector(result, actorState, economyEditorService.getGraph());
-        } else {
-          ui.showPropertiesPanel(result);
-        }
+        showSelectedObjectDetails(result);
       }
     } else {
       ui.hidePropertiesPanel();

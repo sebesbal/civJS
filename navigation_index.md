@@ -37,6 +37,8 @@ Agent-oriented map of the repository for fast code discovery. Prefer this file o
   - `ui/visualizers/economy-visualizer.js`: economy DAG rendering.
   - `ui/visualizers/factory-overview-visualizer.js`: factory overview graph.
   - `ui/persistence/json-file-persistence.js`: browser download/upload helpers.
+- `utils/`: shared UI/viewer infrastructure.
+  - `utils/orthographic-viewer-base.js`: shared base for the economy editor and factory overview canvas viewers.
 - `assets/`: CSS and seed data.
   - `assets/map/map-editor-ui.css`
   - `assets/economy/economy-editor-ui.css`
@@ -53,7 +55,8 @@ Agent-oriented map of the repository for fast code discovery. Prefer this file o
 ## Tests And Diagnostics
 - `e2e/smoke.spec.js`: app shell and editor-mode smoke coverage.
 - `e2e/persistence-services.spec.js`: persistence-related coverage.
-- `test/`: in-app test harnesses, not the main CI entrypoint.
+- `test/simulation-test.js`: the only in-app harness currently exposed through Test mode.
+- `test/`: interactive diagnostics area, but not the main CI entrypoint.
 - `scripts/econ-iteration-bench.mjs`: ad hoc economy performance experiment.
 
 ## Low-Priority Discovery Areas
