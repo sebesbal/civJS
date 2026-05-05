@@ -18,7 +18,7 @@ export class UIManager {
     this.testToolbar = null;
     // Load saved mode from localStorage, default to 'MAP_EDITOR'
     const savedMode = localStorage.getItem('lastEditorMode') || 'MAP_EDITOR';
-    this.currentEditorMode = savedMode; // 'MAP_EDITOR', 'ECONOMY_EDITOR', or 'TEST_EDITOR'
+    this.currentEditorMode = savedMode; // 'GAME', 'MAP_EDITOR', 'ECONOMY_EDITOR', or 'TEST_EDITOR'
     this.onEditorModeChange = null;
     this.renderer = null;
 
@@ -213,6 +213,7 @@ export class UIManager {
     document.body.appendChild(this.mainToolbar);
 
     const modes = [
+      { text: 'Game', mode: 'GAME', title: 'Game' },
       { text: 'Map', mode: 'MAP_EDITOR', title: 'Map Editor' },
       { text: 'Econ', mode: 'ECONOMY_EDITOR', title: 'Economy Editor' },
       { text: 'Fact', mode: 'FACTORY_OVERVIEW', title: 'Factory Overview' },
@@ -241,7 +242,9 @@ export class UIManager {
     });
 
     // Show/hide UI elements based on editor mode
+    const isGame = mode === 'GAME';
     const isMap = mode === 'MAP_EDITOR';
+    const showsMapCanvas = isMap || isGame;
     const isTest = mode === 'TEST_EDITOR';
 
     isMap ? this.mapEditorUI.show() : this.mapEditorUI.hide();
@@ -255,7 +258,7 @@ export class UIManager {
       this.testToolbar.style.display = isTest ? 'flex' : 'none';
     }
     if (this.renderer) {
-      this.renderer.domElement.style.display = isMap ? 'block' : 'none';
+      this.renderer.domElement.style.display = showsMapCanvas ? 'block' : 'none';
     }
 
     // Restore the saved test tab when switching to TEST_EDITOR
@@ -271,6 +274,10 @@ export class UIManager {
 
   setRenderer(renderer) {
     this.renderer = renderer;
+  }
+
+  _isMapVisibleMode() {
+    return this.currentEditorMode === 'MAP_EDITOR';
   }
 
   getCurrentEditorMode() {
@@ -297,19 +304,19 @@ export class UIManager {
   }
 
   showPropertiesPanel(objectData) {
-    if (this.mapEditorUI && this.currentEditorMode === 'MAP_EDITOR') {
+    if (this.mapEditorUI && this._isMapVisibleMode()) {
       this.mapEditorUI.showPropertiesPanel(objectData);
     }
   }
 
   showFactoryInspector(objectData, actorState, economyManager) {
-    if (this.mapEditorUI && this.currentEditorMode === 'MAP_EDITOR') {
+    if (this.mapEditorUI && this._isMapVisibleMode()) {
       this.mapEditorUI.showFactoryInspector(objectData, actorState, economyManager);
     }
   }
 
   showRoutePropertiesPanel(routeData) {
-    if (this.mapEditorUI && this.currentEditorMode === 'MAP_EDITOR') {
+    if (this.mapEditorUI && this._isMapVisibleMode()) {
       this.mapEditorUI.showRoutePropertiesPanel(routeData);
     }
   }

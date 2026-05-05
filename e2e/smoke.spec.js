@@ -7,6 +7,7 @@ test.describe('CivJS smoke', () => {
 
     await page.goto('/');
     await expect(page.locator('#main-toolbar')).toBeVisible();
+    await expect(page.locator('#main-toolbar .toolbar-item').first()).toHaveText('Game');
     await expect(page.locator('button[data-editor-mode="MAP_EDITOR"]')).toBeVisible();
     await expect(page.locator('#sidebar')).toBeVisible();
     await expect(page.locator('canvas').first()).toBeVisible();
@@ -25,5 +26,11 @@ test.describe('CivJS smoke', () => {
 
     await page.click('button[data-editor-mode="TEST_EDITOR"]');
     await expect(page.locator('#test-editor-ui')).toBeVisible();
+
+    await page.click('button[data-editor-mode="GAME"]');
+    await expect(page.locator('#main-toolbar')).toBeVisible();
+    await expect(page.locator('#sidebar')).toBeHidden();
+    await expect(page.locator('#product-sidebar')).toBeHidden();
+    await expect(page.locator('canvas').first()).toBeVisible();
   });
 });

@@ -1,0 +1,51 @@
+- Ami biztos 
+	- Vannak szerződések 
+	- Az árakat végső soron a végfelhasználó határozza meg 
+	
+- Rekurzívan megoldható gazdaság 
+	- Az egész termelési lánc egy DAG (nincs ciklus)
+	- A nyersanyagok felől indulva, minden termelőhöz egyértelműen kiszámolható a következő ajánlati ár 
+
+- Rekurzívan nem megoldható gazdaság 
+	- A termelési láncban vannak körök
+	- Minden interakcióban úgy kezeljük a gráfot, mintha DAG volna 
+	- Ideiglenesen megengedjük a gráfnak, hogy ne legyen egyensúlyban
+		- Addig végzünk iterációkat, amíg a gráf egyensúlyba nem kerül 
+	- Workflow 
+		- Minden körben minden termelő ad egy eladási árajánlatot
+		- A végfelhasználó vesz valamilyen végterméket
+		
+- Raktár
+	- Minden termelőnek kell, hogy legyen raktára. A valóságban sem tudnának anélkül működni.
+	- Minden terméknek, amire potenciálisan szüksége van egy termelőnek, kell, hogy legyen egy minimális raktárkészlete
+	- Ami ennek a raktárkészletnek az értékét illeti, úgy is fel lehet fogni, mint befektetést. Nem kevésbé, mint maga a termelő épülete.
+	- Ebből az következik, hogy a valódi termékek áramlása is lehet kiegyensúlyozatlan. Átmenetileg.
+	- A raktárak méretének növelésével vagy új raktárak hozzáadásával lehet segíteni, hogy a termékek áramlása folyamatos legyen.
+	- Sejtautomata esetén ez azt jelenti, hogy lesznek cellák, amiben vannak termelők és/vagy raktárak, és lesznek cellák, amik üresek. Az üres cellában nem lehet semmilyen raktárkészlet, és nem lehet benne önálló árszámítás; az ottani árak csak egyenes következményei az aktív cellák árainak.
+		- Lesznek aktív és passzív cellák
+	
+- planning, szimuláció 
+	- A virtuális kereskedést és termelést úgy is el lehet képzelni, hogy a termelők elkezdenek normálisan termelni és kereskedni a termékeikkel, negatív raktárkészletet (és egyéb anomáliákat) is megengedve, tesznek tíz lépést, és amilyen árakat kapnak tíz lépés után, azokat az árakat fogják alkalmazni a valóságban. Visszatérnek az eredeti állapotukhoz az új számított árakkal és tesznek egy lépést, aminek az eredményét "valódinak" tekintjük.
+	- Ez nem különbözik lényegesen attól, mintha egyáltalán nem is lennének virtuális lépések. A különbség, hogy ritkábban fog akadozni a termékáramlás és a termelés. 
+	
+- Tökéletes globális megoldást a lineáris programozás adna 
+	- De mi nem akarunk tökéletes megoldást, mert az nem reális. És a cél inkább az, hogy a valóságot szimuláljuk 
+	- Tehát agent alapú megoldásra van szükség 
+- Több kereskedő agent (raktár) hozzáadásának javítania kell a termelési probléma megoldását, nem rontania
+	- Ami nem triviális, mert több láncszemből álló szállítási láncok esetén a közbülső láncsemek viselkedése eddig megoldatlan volt 
+	- Például egy raktár, ami a semmi közepén áll, vagyis azon a cellán nincs se termelő, se fogyasztó, milyen termékeket akarjon raktározni? 
+		- Ha konkrétan áthalad a területén valamilyen kereskedelmi út bizonyos termékekkel, akkor dönthet úgy, hogy raktározni akarja azokat a termékeket 
+			- Ennek főleg akkor van értelme, ha ezek a kereskedelmi útvonalak bonyolultak. Például két kereskedelmi út keresztezi egymást
+	- Tulajdonképpen az a kérdés, hogy ha van egy csomó termelő meg fogyasztó, akkor milyen szállítási és raktározási stratégia a hatékonyabb? Az, hogyha minden termelő össze van kötve minden fogyasztóval, és minden végpontban van raktár. Tehát egy ilyen elosztott rendszer. Ezzel szemben az is felmerül, hogy csillag alakú legyen az elosztási gráf, ahol a központban van egy nagy raktár.
+	- Raktározás költségei 
+		- Lehet a raktárnak egy működési költsége, áram, munkaerő, stb 
+		- Ha egy raktáron keresztül történik a szállítás, akkor az is extra költség, hogy általában az útvonal hosszabb, minthogyha közvetlenül a termelőből a fogyasztóba szállítanánk 
+		- Vagyis több raktár általában nagyobb költséget jelent, cserébe viszont javítja a termelési probléma megoldását, ami összességében nagyobb termelést jelenthet. De ez nyilvánvalóan egy tradeoff, vagyis túl sok raktár lehet hátrányos is 
+		- Ugyanakkor egy csillag alakú úthálózat sokkal olcsóbb megépíteni és fenntartani, mint egy decentralizált úthálózatot. Sőt, konkrétan hatékonyabb is lehet, vagyis alacsonyabb lehet a szállítási költség, mivel a kevesebb út jobb minőségű lehet ugyanazon a költségen, mint a sok rosszabb minőségű út. Vagyis új, nagyobb kapacitású utak építését érdemes raktárakon keresztül vezetni 
+- Raktár működése 
+	- Megnézi, hogy a környezetében milyen kereskedelmi útvonalak haladnak. Nézhetné azt is, hogy milyen termelők és fogyasztók vannak a környéken. Viszont előfordulhat olyan, hogy elhalad mellette egy kereskedelmi út, amihez tartozó fogyasztó és termelő viszont nagyon messze van, tehát nem nézné őket egyébként.
+	- Szóval megnézi, hogy a környéken milyen termékek, milyen mennyiségben haladnak el, és ettől függően dönthet arról, hogy milyen termékeket és mekkora mennyiségben akar raktározni.
+	
+	
+--------------
+
