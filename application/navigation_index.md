@@ -5,6 +5,7 @@
 - `economy-io-service.js`: loads default economy JSON and handles import/export-like graph file operations.
 
 ## `application/game/`
+- `gameplay-controller.js`: Game mode settler unit spawning, selection, movement, destination markers, and camera focus.
 - `map-editor.js`: interaction/controller layer over tilemap, objects, and routes.
 - `game-session-service.js`: owns creation/rebinding of `SimulationEngine` and `TradeRenderer`.
 - `state-service.js`: full game-state serialization and deserialization.
@@ -16,6 +17,7 @@
 - Simulation lifecycle issue: `game-session-service.js`
 - Save/load issue: `state-service.js`
 - Map placement/editor issue: `map-editor.js`
+- Game mode unit behavior: `gameplay-controller.js`
 - Economy-to-map product mismatch: `object-types.js`
 - Auto-generation behavior: `random-factory-generator.js`
 

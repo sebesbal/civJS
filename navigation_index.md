@@ -11,6 +11,7 @@ Agent-oriented map of the repository for fast code discovery. Prefer this file o
 ## Core Source Areas
 - `application/`: orchestration/services.
   - `application/game/map-editor.js`: editor-side interaction logic over map/domain objects.
+  - `application/game/gameplay-controller.js`: Game mode settler unit spawning, selection, movement, and camera focus.
   - `application/game/game-session-service.js`: owns runtime simulation/trade-renderer lifecycle.
   - `application/game/state-service.js`: save/load serialization.
   - `application/game/object-types.js`: derives placeable map object types from the economy graph.

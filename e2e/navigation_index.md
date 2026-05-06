@@ -1,6 +1,7 @@
 # Navigation Index
 
 - `smoke.spec.js`: high-value browser smoke coverage.
+- `gameplay-controller.spec.js`: focused browser-side coverage for Game mode settler spawn/movement behavior.
 - `persistence-services.spec.js`: persistence and file-service coverage.
 - `playwright.config.js` at repo root controls runner behavior.
 - `serve.ps1` at repo root is the simplest local HTTP server for these tests.

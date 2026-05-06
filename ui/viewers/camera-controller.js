@@ -108,5 +108,20 @@ export class CameraController {
     this.camera.lookAt(this.target);
     this.currentZoomDistance = this.camera.position.distanceTo(this.target);
   }
+
+  focusOn(worldPosition, distance = this.currentZoomDistance) {
+    const direction = new THREE.Vector3().subVectors(this.camera.position, this.target);
+    if (direction.lengthSq() === 0) {
+      direction.set(1, 1.35, 1);
+    }
+
+    direction.normalize();
+    const clampedDistance = Math.max(this.minDistance, Math.min(this.maxDistance, distance));
+
+    this.target.copy(worldPosition);
+    this.camera.position.copy(worldPosition).addScaledVector(direction, clampedDistance);
+    this.camera.lookAt(this.target);
+    this.currentZoomDistance = clampedDistance;
+  }
 }
 

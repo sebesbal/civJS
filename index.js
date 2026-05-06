@@ -10,6 +10,7 @@ import { EconomyEditorService } from './application/economy/economy-editor-servi
 import { EconomyIOService } from './application/economy/economy-io-service.js';
 import { GameStateService } from './application/game/state-service.js';
 import { GameSessionService } from './application/game/game-session-service.js';
+import { GameplayController } from './application/game/gameplay-controller.js';
 import { JsonFilePersistence } from './ui/persistence/json-file-persistence.js';
 import { MapOverlayRenderer } from './ui/visualizers/map-overlay-renderer.js';
 
@@ -56,6 +57,13 @@ const gameSessionService = new GameSessionService({
   mapEditor,
   tilemap,
   economyEditorService
+});
+const gameplayController = new GameplayController({
+  scene,
+  camera,
+  renderer,
+  tilemap,
+  cameraController
 });
 
 // Simulation engine and trade renderer (created lazily, initialized on first start)
@@ -215,6 +223,15 @@ function setupUICallbacks(ui, mapEditor, routeManager) {
 
 // Connect UI callbacks
 setupUICallbacks(ui, mapEditor, routeManager);
+ui.onEditorModeChange = (mode) => {
+  if (mode === 'GAME') {
+    cancelRouteModeIfActive();
+    gameplayController.focusOnSettler();
+  }
+};
+if (ui.getCurrentEditorMode() === 'GAME') {
+  gameplayController.focusOnSettler();
+}
 
 // Economy Editor Save/Load callbacks
 // Simulation callbacks
@@ -300,6 +317,8 @@ ui.onLoadGame = async (file) => {
       tileHeight: gameState.mapConfig.tileHeight,
       tileData: gameState.tiles
     });
+    gameplayController.setTilemap(tilemap);
+    gameplayController.resetSettler();
     
     // Recreate map editor with new tiles and map config
     mapEditor = new MapEditor(scene, camera, renderer, tilemap.tiles, tilemap.getConfig(), routeManager);
@@ -351,7 +370,24 @@ ui.onLoadGame = async (file) => {
 // Mouse event handlers
 const onMouseDown = (event) => {
   const currentMode = ui.getCurrentMode();
+  const currentEditorMode = ui.getCurrentEditorMode();
   const isRouteMode = routeManager.isInRouteCreationMode();
+
+  if (currentEditorMode === 'GAME') {
+    if (event.button !== 0) {
+      cameraController.handleMouseDown(event, false);
+      return;
+    }
+
+    const result = gameplayController.handlePrimaryClick(event);
+    if (result.handled) {
+      cameraController.handleMouseDown(event, false);
+      return;
+    }
+
+    cameraController.handleMouseDown(event, true);
+    return;
+  }
   
   // Handle route creation
   if (isRouteMode) {
@@ -417,7 +453,13 @@ const onWheel = (event) => {
 const onContextMenu = (event) => {
   event.preventDefault();
   const currentMode = ui.getCurrentMode();
+  const currentEditorMode = ui.getCurrentEditorMode();
   const isRouteMode = routeManager.isInRouteCreationMode();
+
+  if (currentEditorMode === 'GAME') {
+    gameplayController.handleSecondaryClick(event);
+    return;
+  }
   
   // Finish route creation on right-click if in route mode
   if (isRouteMode) {
@@ -503,11 +545,15 @@ window.addEventListener('resize', () => {
 
 function animate(timestamp) {
   requestAnimationFrame(animate);
+  const deltaSeconds = Math.min(0.05, ((timestamp - (animate.lastTimestamp ?? timestamp)) / 1000) || 0);
+  animate.lastTimestamp = timestamp;
 
   // Simulation tick (fixed timestep, decoupled from frame rate)
   if (simulationEngine) {
     simulationEngine.update(timestamp);
   }
+
+  gameplayController.update(deltaSeconds);
 
   // Trade renderer (smooth animation every frame)
   if (tradeRenderer) {
